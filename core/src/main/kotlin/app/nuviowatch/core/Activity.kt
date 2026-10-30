@@ -57,7 +57,8 @@ class AlertPolicy(
             if (entry == null) return LiveState.IDLE
             val age = nowMs - entry.lastWatchedMs
             return when {
-                age < 20 * 60_000L && !entry.isCompleted -> LiveState.ACTIVE_NOW
+                // Nuvio can't say whether playback is still running, only that progress just arrived.
+                age < 15 * 60_000L && !entry.isCompleted -> LiveState.ACTIVE_NOW
                 age < 6 * 60 * 60_000L -> LiveState.RECENT
                 else -> LiveState.IDLE
             }

@@ -53,7 +53,8 @@ object Notifier {
         val name = title?.name ?: entry.contentId
         val episode = episodeLabel(entry.season, entry.episode)
         val heading = when (alert.kind) {
-            AlertKind.WATCHING -> "${alert.profile.name} started watching"
+            // Progress also arrives when someone stops, so don't claim they're still watching.
+            AlertKind.WATCHING -> "${alert.profile.name} is on Nuvio"
             AlertKind.FINISHED -> "${alert.profile.name} finished"
         }
         val id = alert.cooldownKey.hashCode()

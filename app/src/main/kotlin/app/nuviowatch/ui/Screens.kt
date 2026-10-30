@@ -186,7 +186,7 @@ fun NowScreen(state: UiState, onOpenSettings: () -> Unit) {
 
         item(key = "note") {
             Text(
-                "Nuvio shares progress when someone pauses, skips or stops, so \"watching\" can lag a few minutes behind.",
+                "Nuvio only shares progress when someone pauses, skips or stops, so \"active\" means they did one of those recently. It can't tell whether they're still watching.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextMuted,
                 modifier = Modifier.padding(horizontal = 20.dp),
@@ -246,12 +246,13 @@ private fun Hero(state: UiState, hero: ProfileNow?, tint: Color) {
                 return@Column
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                val ago = timeAgo(entry.lastWatchedMs, state.clock).uppercase()
                 if (live) {
                     LiveDot()
                     Spacer(Modifier.width(4.dp))
-                    Text("${hero.profile.name.uppercase()} IS WATCHING", style = Eyebrow, color = Color(0xFFFFB3C1))
+                    Text("${hero.profile.name.uppercase()} · ACTIVE ${ago}", style = Eyebrow, color = Color(0xFFFFB3C1))
                 } else {
-                    Text("${hero.profile.name.uppercase()} WATCHED · ${timeAgo(entry.lastWatchedMs, state.clock).uppercase()}", style = Eyebrow, color = TextMuted)
+                    Text("${hero.profile.name.uppercase()} WATCHED · $ago", style = Eyebrow, color = TextMuted)
                 }
             }
             Text(info?.name ?: entry.contentId, style = display(44), maxLines = 2, overflow = TextOverflow.Ellipsis)
