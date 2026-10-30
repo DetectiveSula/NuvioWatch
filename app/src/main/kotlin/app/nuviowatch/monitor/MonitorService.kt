@@ -64,17 +64,28 @@ class MonitorService : Service() {
     private suspend fun listenForLiveReports() {
         var backoff = 5_000L
         while (currentCoroutineContext().isActive) {
+            val prefs = graph.prefs
             val relay = LiveHub.relay(this)
             if (relay == null) {
+                prefs.setStatus("stream", "Waiting: account id missing, sign out and in again")
                 delay(30_000)
                 continue
             }
             try {
-                relay.listen(graph.prefs.liveSince ?: "15m") { id, event -> LiveReceiver.onEvent(this, id, event) }
+                prefs.setStatus("stream", "Connecting…")
+                relay.listen(
+                    since = prefs.liveSince ?: "15m",
+                    onOpen = { prefs.setStatus("stream", "Connected, listening") },
+                ) { id, event ->
+                    prefs.setStatus("received", "${event.deviceName}: ${event.state.name.lowercase()} · ${event.title}")
+                    LiveReceiver.onEvent(this, id, event)
+                }
+                prefs.setStatus("stream", "Disconnected, reconnecting")
                 backoff = 5_000L
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                prefs.setStatus("stream", "Error: ${e.message ?: e.javaClass.simpleName} (retrying)")
                 delay(backoff)
                 backoff = (backoff * 2).coerceAtMost(120_000L)
             }

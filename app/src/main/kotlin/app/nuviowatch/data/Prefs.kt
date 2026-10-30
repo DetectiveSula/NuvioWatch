@@ -121,6 +121,13 @@ class Prefs(context: Context) : SessionStore {
     fun lastSeenProgress(profileId: Int): Long = prefs.getLong("last_seen_$profileId", 0)
     fun setLastSeenProgress(profileId: Int, at: Long) = prefs.edit { putLong("last_seen_$profileId", at) }
 
+    /** Latest status line from each part of the app, shown in Settings for troubleshooting. */
+    fun setStatus(part: String, text: String) =
+        prefs.edit { putString("status_$part", text).putLong("status_at_$part", System.currentTimeMillis()) }
+
+    fun status(part: String): Pair<String, Long>? =
+        prefs.getString("status_$part", null)?.let { it to prefs.getLong("status_at_$part", 0) }
+
     /** Alerts about a profile are paused until this time (set by "Mute today"). */
     fun mutedUntil(profileId: Int): Long = prefs.getLong("muted_until_$profileId", 0)
     fun setMutedUntil(profileId: Int, at: Long) = prefs.edit { putLong("muted_until_$profileId", at) }

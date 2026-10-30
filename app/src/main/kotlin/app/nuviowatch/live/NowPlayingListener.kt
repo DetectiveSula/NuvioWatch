@@ -52,7 +52,8 @@ class NowPlayingListener : NotificationListenerService() {
         runCatching {
             manager.addOnActiveSessionsChangedListener(sessionsChanged, me, main)
             attach(manager.getActiveSessions(me))
-        }
+        }.onSuccess { graph.prefs.setStatus("listener", "Connected") }
+            .onFailure { graph.prefs.setStatus("listener", "Couldn't read media sessions: ${it.message}") }
         main.postDelayed(heartbeat, HEARTBEAT_MS)
     }
 
@@ -81,12 +82,21 @@ class NowPlayingListener : NotificationListenerService() {
             nuvio.getValue(key).registerCallback(callback, main)
             watched[key] = nuvio.getValue(key)
         }
+        val others = controllers.map { it.packageName }.filter { it !in NUVIO_PACKAGES }.distinct()
+        graph.prefs.setStatus(
+            "player",
+            if (nuvio.isEmpty()) "No Nuvio player open" + (if (others.isNotEmpty()) " (other players: ${others.joinToString()})" else "")
+            else "Nuvio player found",
+        )
         report()
     }
 
     private fun report(force: Boolean = false) {
         val prefs = graph.prefs
-        if (!prefs.reportPlayback || !prefs.signedIn.value) return
+        if (!prefs.reportPlayback || !prefs.signedIn.value) {
+            prefs.setStatus("send", if (!prefs.signedIn.value) "Not sending: not signed in" else "Not sending: reporting is off")
+            return
+        }
         val now = System.currentTimeMillis()
         val active = watched.values.firstOrNull { it.playbackState?.state in LIVE_STATES }
             ?: watched.values.firstOrNull { it.metadata != null }
@@ -115,7 +125,16 @@ class NowPlayingListener : NotificationListenerService() {
         if (!changed && !force) return
         if (event.title.isBlank()) return
         lastSent = event
-        scope.launch { runCatching { LiveHub.relay(this@NowPlayingListener)?.publish(event) } }
+        scope.launch {
+            val relay = LiveHub.relay(this@NowPlayingListener)
+            if (relay == null) {
+                prefs.setStatus("send", "Not sending: account id missing, sign out and in again")
+                return@launch
+            }
+            runCatching { relay.publish(event) }
+                .onSuccess { prefs.setStatus("send", "Sent \"${event.state.name.lowercase()}\" · ${event.title}") }
+                .onFailure { prefs.setStatus("send", "Send failed: ${it.message}") }
+        }
     }
 
     companion object {

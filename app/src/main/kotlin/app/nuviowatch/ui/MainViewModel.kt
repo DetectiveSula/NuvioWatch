@@ -77,6 +77,9 @@ data class UiState(
     /** Devices currently playing or paused in Nuvio, newest first. */
     val liveNow: List<LiveNow> = emptyList(),
     val device: DeviceSettings = DeviceSettings(),
+    /** Troubleshooting lines: label to "text · time". */
+    val statuses: List<Pair<String, String>> = emptyList(),
+    val testMessage: String? = null,
 ) {
     fun stats(profileIndex: Int?, range: StatsRange = StatsRange.MONTH): Stats = StatsCalculator.compute(
         viewings.filter { profileIndex == null || it.profileIndex == profileIndex },
@@ -91,6 +94,8 @@ data class UiState(
 }
 
 private data class Local(
+    val statuses: List<Pair<String, String>> = emptyList(),
+    val testMessage: String? = null,
     val liveDevices: Map<String, LiveEvent> = emptyMap(),
     val device: DeviceSettings = DeviceSettings(),
     val server: ServerStatus = ServerStatus.DETECTING,
@@ -138,6 +143,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .sortedByDescending { it.at }
                 .map { LiveNow(it, LiveHub.profileFor(it, snapshot, titles), LiveHub.titleFor(it, titles)) },
             device = local.device,
+            statuses = local.statuses,
+            testMessage = local.testMessage,
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
@@ -151,6 +158,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     it.copy(
                         liveDevices = prefs.liveDevices,
                         device = deviceSettings(),
+                        statuses = statuses(),
                         live = prefs.liveEntries,
                         lastPollAt = prefs.lastPollAt,
                         lastPollError = prefs.lastPollError,
@@ -219,6 +227,44 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setReportPlayback(on: Boolean) {
         prefs.reportPlayback = on
         local.update { it.copy(device = deviceSettings()) }
+    }
+
+    private fun statuses(): List<Pair<String, String>> {
+        val now = System.currentTimeMillis()
+        fun line(part: String, fallback: String): String =
+            prefs.status(part)?.let { (text, at) -> "$text · ${timeAgo(at, now)}" } ?: fallback
+        val access = NowPlayingListener.hasAccess(getApplication<Application>())
+        return listOf(
+            "Live connection" to if (prefs.settings.value.enabled) line("stream", "Not started yet") else "Off (turn on Watching alerts)",
+            "Last live report received" to line("received", "None yet"),
+            "Notification access here" to if (access) "Allowed" else "Not allowed",
+            "Media reader here" to if (access) line("listener", "Not connected yet") else "Needs notification access",
+            "Nuvio player here" to line("player", "Not seen yet"),
+            "Last report sent from here" to line("send", "None yet"),
+        )
+    }
+
+    /** Sends a pretend "started" and "stopped" so phones can check they hear each other. */
+    fun sendTest() = viewModelScope.launch {
+        val relay = LiveHub.relay(getApplication())
+        if (relay == null) {
+            local.update { it.copy(testMessage = "Can't send: account id missing. Sign out and in again.") }
+            return@launch
+        }
+        val base = LiveEvent(
+            deviceId = "test-" + prefs.deviceId,
+            deviceName = prefs.deviceName,
+            title = "Test alert",
+            subtitle = "If you see this, phones can hear each other",
+            state = PlayState.PLAYING,
+            at = System.currentTimeMillis(),
+        )
+        runCatching {
+            relay.publish(base)
+            delay(8_000)
+            relay.publish(base.copy(state = PlayState.STOPPED, at = System.currentTimeMillis()))
+        }.onSuccess { local.update { it.copy(testMessage = "Test sent. Other phones with alerts on should buzz now.") } }
+            .onFailure { e -> local.update { it.copy(testMessage = "Test failed: ${e.message}") } }
     }
 
     private fun deviceSettings(): DeviceSettings {

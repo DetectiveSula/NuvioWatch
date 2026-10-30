@@ -738,6 +738,19 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
             DeviceCard(state, vm)
 
             GlassCard {
+                SectionTitle("Status")
+                state.statuses.forEach { (label, value) ->
+                    Column(Modifier.padding(vertical = 5.dp)) {
+                        Text(label, fontSize = 12.sp, color = TextMuted)
+                        Text(value, fontSize = 14.sp)
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(onClick = { vm.sendTest() }) { Text("Send test alert") }
+                state.testMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = TextMuted, modifier = Modifier.padding(top = 6.dp)) }
+            }
+
+            GlassCard {
                 SectionTitle("Account")
                 Text(state.email.ifBlank { "Signed in" })
                 Text(state.serverUrl, style = MaterialTheme.typography.bodySmall, color = TextMuted)

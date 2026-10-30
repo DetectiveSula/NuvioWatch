@@ -95,7 +95,11 @@ class LiveRelay(
      * seen (or a duration like "10m"); [onEvent] gets each message's id so the
      * caller can resume from it. Returns the id of the last message read.
      */
-    suspend fun listen(since: String, onEvent: suspend (id: String, event: LiveEvent) -> Unit): String? = withContext(Dispatchers.IO) {
+    suspend fun listen(
+        since: String,
+        onOpen: () -> Unit = {},
+        onEvent: suspend (id: String, event: LiveEvent) -> Unit,
+    ): String? = withContext(Dispatchers.IO) {
         var lastId: String? = null
         streamHttp.newCall(Request.Builder().url("$baseUrl/${channel.topic}/json?since=$since").build()).execute().use { response ->
             if (!response.isSuccessful) throw java.io.IOException("Relay returned ${response.code}")
@@ -104,7 +108,9 @@ class LiveRelay(
                 currentCoroutineContext().ensureActive()
                 val line = source.readUtf8Line() ?: break
                 val obj = runCatching { NuvioClient.json.parseToJsonElement(line).jsonObject }.getOrNull() ?: continue
-                if (obj["event"]?.jsonPrimitive?.contentOrNull != "message") continue
+                val kind = obj["event"]?.jsonPrimitive?.contentOrNull
+                if (kind == "open") onOpen()
+                if (kind != "message") continue
                 val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: continue
                 lastId = id
                 val event = obj["message"]?.jsonPrimitive?.contentOrNull?.let(channel::decrypt) ?: continue
