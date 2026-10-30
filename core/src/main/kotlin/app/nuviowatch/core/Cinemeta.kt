@@ -54,6 +54,40 @@ class Cinemeta(
         }
     }
 
+    @Serializable
+    private data class SeriesResponse(val meta: SeriesMeta? = null)
+
+    @Serializable
+    private data class SeriesMeta(val videos: List<Video> = emptyList())
+
+    @Serializable
+    private data class Video(
+        val season: Int? = null,
+        val episode: Int? = null,
+        val number: Int? = null,
+        val name: String? = null,
+        val title: String? = null,
+        val released: String? = null,
+        val thumbnail: String? = null,
+    )
+
+    /** A series' episodes in order (specials left out), or null if it couldn't be fetched. */
+    suspend fun episodes(id: String): List<EpisodeInfo>? = withContext(Dispatchers.IO) {
+        if (!canLookUp(id)) return@withContext null
+        runCatching {
+            http.newCall(Request.Builder().url("$baseUrl/meta/series/$id.json").build()).execute().use { response ->
+                if (!response.isSuccessful) return@use null
+                val videos = NuvioClient.json.decodeFromString<SeriesResponse>(response.body?.string().orEmpty()).meta?.videos.orEmpty()
+                videos.mapNotNull { v ->
+                    val season = v.season ?: return@mapNotNull null
+                    val episode = v.episode ?: v.number ?: return@mapNotNull null
+                    if (season <= 0) return@mapNotNull null
+                    EpisodeInfo(season, episode, v.name ?: v.title, v.released?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }, v.thumbnail)
+                }.distinctBy { it.season to it.episode }.sortedWith(compareBy({ it.season }, { it.episode }))
+            }
+        }.getOrNull()
+    }
+
     suspend fun lookup(id: String, series: Boolean): TitleInfo? = runCatching { fetch(id, series) }.getOrNull()
 
     /**

@@ -22,7 +22,9 @@ class AppGraph(private val context: Context) {
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
-    val titles = TitleCache(context, Cinemeta(http))
+    private val cinemeta = Cinemeta(http)
+    val titles = TitleCache(context, cinemeta)
+    val episodes = EpisodeCache(context, cinemeta)
     val repository = Repository(context, ::client, titles)
     private val serverSetup = ServerSetup(http)
 

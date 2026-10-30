@@ -61,6 +61,7 @@ import app.nuviowatch.core.BadgeProgress
 import app.nuviowatch.core.Fun
 import app.nuviowatch.core.Profile
 import app.nuviowatch.core.StatsCalculator
+import app.nuviowatch.core.UpNext
 import app.nuviowatch.core.Wrapped
 import app.nuviowatch.core.episodeLabel
 import kotlinx.coroutines.launch
@@ -153,6 +154,15 @@ private fun FamilyHome(state: UiState, onPerson: (Int) -> Unit, onStory: (Int) -
                     fontSize = 11.sp,
                     color = TextMuted,
                 )
+            }
+
+            // Up next
+            val queue = remember(state.viewings, state.episodes, state.clock / 3_600_000) { Fun.upNext(state.viewings, state.episodes, state.clock) }
+            if (queue.isNotEmpty()) {
+                GlassCard(padding = 18.dp) {
+                    SectionTitle("Up next")
+                    queue.take(8).forEach { UpNextRow(it, state, showProfile = true) }
+                }
             }
 
             // Wrapped
@@ -296,6 +306,48 @@ private fun AbandonedRow(a: AbandonedTitle, state: UiState, showProfile: Boolean
     }
 }
 
+@Composable
+private fun UpNextRow(u: UpNext, state: UiState, showProfile: Boolean) {
+    val info = state.titles[u.contentId]
+    val profile = state.profile(u.profileIndex)
+    val status = when {
+        u.resume -> "Resume"
+        u.availableNow -> "Ready"
+        else -> u.next.releasedMs?.let { airsIn(it, state.clock) } ?: "Coming soon"
+    }
+    Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box {
+            Poster(info?.poster, width = 38.dp, corner = 8.dp)
+            if (showProfile && profile != null) {
+                Box(Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 6.dp)) { ProfileAvatar(profile, size = 20.dp) }
+            }
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(info?.name ?: u.contentId, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                listOfNotNull(episodeLabel(u.next.season, u.next.episode), u.next.title, if (showProfile) profile?.name else null).joinToString(" · "),
+                fontSize = 12.sp,
+                color = TextMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Pill(status, if (u.availableNow) Color(0xFF7CE0C3) else Color(0xFFFFD166))
+    }
+}
+
+private fun airsIn(releasedMs: Long, nowMs: Long): String {
+    val days = ((releasedMs - nowMs) / 86_400_000L).toInt()
+    return when {
+        days <= 0 -> "Airs today"
+        days == 1 -> "Tomorrow"
+        days < 7 -> "In $days days"
+        else -> "Airs " + java.time.Instant.ofEpochMilli(releasedMs).atZone(java.time.ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("d MMM"))
+    }
+}
+
 // ---------------------------------------------------------------- Profile page
 
 @Composable
@@ -362,6 +414,14 @@ private fun ProfilePage(state: UiState, index: Int, onBack: () -> Unit) {
             if (stats.topGenres.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     stats.topGenres.forEach { (g, n) -> Pill("$g $n", color) }
+                }
+            }
+
+            val myQueue = remember(mine, state.episodes, state.clock / 3_600_000) { Fun.upNext(mine, state.episodes, state.clock) }
+            if (myQueue.isNotEmpty()) {
+                GlassCard(padding = 18.dp) {
+                    SectionTitle("Up next")
+                    myQueue.take(6).forEach { UpNextRow(it, state, showProfile = false) }
                 }
             }
 

@@ -101,4 +101,22 @@ class FunTest {
         assertEquals(LocalDate.of(2026, 10, 28) to 100 * min, w.busiestDay)
         assertNull(Fun.wrapped(v, titles, LocalDate.of(2027, 1, 1), LocalDate.of(2027, 2, 1), "Jan", zone))
     }
+
+    @Test
+    fun upNextQueue() {
+        val eps = (1..4).map { EpisodeInfo(1, it, "E$it", at(30, 12)) } + EpisodeInfo(2, 1, "New season", now + 3 * 86_400_000L)
+        val v = listOf(
+            ep(1, "show", 2, at(1, 20)),                 // finished S1E2 → S1E3 next
+            ep(2, "show", 3, at(0, 20), done = false),   // stopped in S1E3 → resume it
+            ep(3, "show", 4, at(2, 20)),                 // finished the season → S2E1 airs in 3 days
+            ep(4, "show", 1, at(90, 20)),                // too long ago
+        )
+        val queue = Fun.upNext(v, mapOf("show" to eps), now)
+        assertEquals(listOf(2, 1, 3), queue.map { it.profileIndex })
+        assertTrue(queue[0].resume)
+        assertEquals(3, queue[0].next.episode)
+        assertEquals(3, queue[1].next.episode)
+        assertFalse(queue[2].availableNow)
+        assertEquals("New season", queue[2].next.title)
+    }
 }

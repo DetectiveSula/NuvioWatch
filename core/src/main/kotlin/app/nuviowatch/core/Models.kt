@@ -106,6 +106,16 @@ data class TitleInfo(
     val year: String? = null,
 )
 
+/** One episode of a series, from Cinemeta. */
+@Serializable
+data class EpisodeInfo(
+    val season: Int,
+    val episode: Int,
+    val title: String? = null,
+    val releasedMs: Long? = null,
+    val thumbnail: String? = null,
+)
+
 /** Nuvio treats 90% watched as finished. */
 fun isComplete(positionMs: Long, durationMs: Long): Boolean =
     durationMs >= MIN_REAL_DURATION_MS && positionMs.toDouble() / durationMs >= 0.90

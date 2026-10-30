@@ -3,6 +3,7 @@ package app.nuviowatch.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.nuviowatch.core.EpisodeInfo
 import app.nuviowatch.core.LiveEvent
 import app.nuviowatch.core.PlayState
 import app.nuviowatch.core.Profile
@@ -86,6 +87,7 @@ data class UiState(
     val statuses: List<Pair<String, String>> = emptyList(),
     val testMessage: String? = null,
     val recaps: RecapSettings = RecapSettings(),
+    val episodes: Map<String, List<EpisodeInfo>> = emptyMap(),
 ) {
     fun stats(profileIndex: Int?, range: StatsRange = StatsRange.MONTH): Stats = StatsCalculator.compute(
         viewings.filter { profileIndex == null || it.profileIndex == profileIndex },
@@ -100,6 +102,7 @@ data class UiState(
 }
 
 private data class Local(
+    val episodes: Map<String, List<EpisodeInfo>> = emptyMap(),
     val recaps: RecapSettings = RecapSettings(),
     val statuses: List<Pair<String, String>> = emptyList(),
     val testMessage: String? = null,
@@ -153,10 +156,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             statuses = local.statuses,
             testMessage = local.testMessage,
             recaps = local.recaps,
+            episodes = local.episodes,
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
     init {
+        viewModelScope.launch { graph.episodes.episodes.collect { e -> local.update { it.copy(episodes = e) } } }
         detectServer()
         if (prefs.signedIn.value) refresh()
         // Pick up what the background monitor has seen, and keep "x minutes ago" labels current.
@@ -205,9 +210,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh() = viewModelScope.launch {
         local.update { it.copy(loading = true, error = null) }
         runCatching { graph.repository.refresh() }
-            .onSuccess {
+            .onSuccess { snapshot ->
                 local.update { it.copy(loading = false) }
                 NowWidget.update(getApplication())
+                // Episode lists for shows watched in the last two months, for "Up next".
+                val since = System.currentTimeMillis() - 60 * 86_400_000L
+                val series = snapshot.progress.values.flatten().filter { it.season != null && it.lastWatchedMs > since }.map { it.contentId } +
+                    snapshot.watched.values.flatten().filter { it.season != null && it.watchedAtMs > since }.map { it.contentId }
+                launch { runCatching { graph.episodes.ensure(series.toSet()) } }
             }
             .onFailure { e -> local.update { it.copy(loading = false, error = e.message ?: "Couldn't load your Nuvio data") } }
     }

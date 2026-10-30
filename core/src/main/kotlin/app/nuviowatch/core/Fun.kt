@@ -60,6 +60,17 @@ data class Pick(
     val score: Double,
 )
 
+/** The next thing to watch in a series someone is following. */
+data class UpNext(
+    val profileIndex: Int,
+    val contentId: String,
+    val next: EpisodeInfo,
+    /** True if they stopped part-way through [next]. */
+    val resume: Boolean,
+    val availableNow: Boolean,
+    val lastAtMs: Long,
+)
+
 /** Wrapped-style story for a month or a year. */
 data class Wrapped(
     val label: String,
@@ -235,6 +246,42 @@ object Fun {
             }
             .sortedByDescending { it.score }
             .take(limit)
+    }
+
+    // ------------------------------------------------------------ Up next
+
+    /**
+     * For each series someone watched in the last [activeDays], the episode to watch
+     * next: the one they stopped in, or the one after their latest. Ready ones come
+     * first (most recently watched), then upcoming ones by air date.
+     */
+    fun upNext(
+        viewings: List<Viewing>,
+        episodes: Map<String, List<EpisodeInfo>>,
+        nowMs: Long,
+        activeDays: Long = 60,
+    ): List<UpNext> {
+        val since = nowMs - activeDays * 86_400_000L
+        return viewings.filter { it.series && it.season != null && it.episode != null }
+            .groupBy { it.profileIndex to it.contentId }
+            .mapNotNull { (key, vs) ->
+                val lastAt = vs.maxOf { it.atMs }
+                if (lastAt < since) return@mapNotNull null
+                val list = episodes[key.second] ?: return@mapNotNull null
+                val latest = vs.maxWith(compareBy({ it.season!! }, { it.episode!! }))
+                val (next, resume) = if (!latest.completed && latest.fraction > 0f) {
+                    (list.firstOrNull { it.season == latest.season && it.episode == latest.episode } ?: return@mapNotNull null) to true
+                } else {
+                    (list.firstOrNull { it.season > latest.season!! || (it.season == latest.season && it.episode > latest.episode!!) } ?: return@mapNotNull null) to false
+                }
+                val available = next.releasedMs == null || next.releasedMs <= nowMs
+                UpNext(key.first, key.second, next, resume, available, lastAt)
+            }
+            .sortedWith(
+                compareByDescending<UpNext> { it.availableNow }
+                    .thenByDescending { if (it.availableNow) it.lastAtMs else 0 }
+                    .thenBy { it.next.releasedMs ?: Long.MAX_VALUE },
+            )
     }
 
     // ------------------------------------------------------------ Wrapped
