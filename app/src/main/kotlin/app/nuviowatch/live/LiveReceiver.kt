@@ -7,6 +7,7 @@ import app.nuviowatch.core.LiveTracker
 import app.nuviowatch.core.PlayState
 import app.nuviowatch.graph
 import app.nuviowatch.monitor.Notifier
+import app.nuviowatch.widget.NowWidget
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -24,6 +25,7 @@ object LiveReceiver {
         prefs.liveSince = id
         // Replayed after a reconnect, or from this phone itself: not news.
         val fresh = System.currentTimeMillis() - event.at < FRESH_MS
+        NowWidget.update(context)
         val ownDevice = event.deviceId == prefs.deviceId
         if (change != null && fresh) {
             if (ownDevice && !prefs.alertOwnDevice) {
@@ -37,7 +39,10 @@ object LiveReceiver {
     /** Devices that went silent while playing (e.g. switched off) count as stopped. */
     suspend fun expire(context: Context, nowMs: Long) = mutex.withLock {
         restore(context)
-        if (tracker.expire(nowMs).isNotEmpty()) context.graph.prefs.liveDevices = tracker.states
+        if (tracker.expire(nowMs).isNotEmpty()) {
+            context.graph.prefs.liveDevices = tracker.states
+            NowWidget.update(context)
+        }
     }
 
     private fun restore(context: Context) {

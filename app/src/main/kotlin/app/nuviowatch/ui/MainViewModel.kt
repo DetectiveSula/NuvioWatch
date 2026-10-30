@@ -17,6 +17,8 @@ import app.nuviowatch.graph
 import app.nuviowatch.live.LiveHub
 import app.nuviowatch.live.LiveReceiver
 import app.nuviowatch.live.NowPlayingListener
+import app.nuviowatch.recap.Recaps
+import app.nuviowatch.widget.NowWidget
 import app.nuviowatch.monitor.Monitor
 import app.nuviowatch.monitor.MonitorService
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +38,8 @@ enum class ServerStatus { DETECTING, READY, NOT_FOUND }
 
 /** A device where Nuvio is playing or paused right now. */
 data class LiveNow(val event: LiveEvent, val profile: Profile?, val info: TitleInfo?)
+
+data class RecapSettings(val daily: Boolean = true, val weekly: Boolean = true, val hour: Int = 21, val message: String? = null)
 
 data class DeviceSettings(
     val name: String = "",
@@ -81,6 +85,7 @@ data class UiState(
     /** Troubleshooting lines: label to "text · time". */
     val statuses: List<Pair<String, String>> = emptyList(),
     val testMessage: String? = null,
+    val recaps: RecapSettings = RecapSettings(),
 ) {
     fun stats(profileIndex: Int?, range: StatsRange = StatsRange.MONTH): Stats = StatsCalculator.compute(
         viewings.filter { profileIndex == null || it.profileIndex == profileIndex },
@@ -95,6 +100,7 @@ data class UiState(
 }
 
 private data class Local(
+    val recaps: RecapSettings = RecapSettings(),
     val statuses: List<Pair<String, String>> = emptyList(),
     val testMessage: String? = null,
     val liveDevices: Map<String, LiveEvent> = emptyMap(),
@@ -146,6 +152,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             device = local.device,
             statuses = local.statuses,
             testMessage = local.testMessage,
+            recaps = local.recaps,
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
@@ -160,6 +167,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         liveDevices = prefs.liveDevices,
                         device = deviceSettings(),
                         statuses = statuses(),
+                        recaps = it.recaps.copy(daily = prefs.dailyRecap, weekly = prefs.weeklyRecap, hour = prefs.recapHour),
                         live = prefs.liveEntries,
                         lastPollAt = prefs.lastPollAt,
                         lastPollError = prefs.lastPollError,
@@ -197,7 +205,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh() = viewModelScope.launch {
         local.update { it.copy(loading = true, error = null) }
         runCatching { graph.repository.refresh() }
-            .onSuccess { local.update { it.copy(loading = false) } }
+            .onSuccess {
+                local.update { it.copy(loading = false) }
+                NowWidget.update(getApplication())
+            }
             .onFailure { e -> local.update { it.copy(loading = false, error = e.message ?: "Couldn't load your Nuvio data") } }
     }
 
@@ -223,6 +234,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setDeviceProfile(index: Int?) {
         prefs.deviceProfile = index
         local.update { it.copy(device = deviceSettings()) }
+    }
+
+    fun setRecaps(daily: Boolean? = null, weekly: Boolean? = null, hour: Int? = null) {
+        daily?.let { prefs.dailyRecap = it }
+        weekly?.let { prefs.weeklyRecap = it }
+        hour?.let { prefs.recapHour = it }
+        Recaps.schedule(getApplication())
+        local.update { it.copy(recaps = it.recaps.copy(daily = prefs.dailyRecap, weekly = prefs.weeklyRecap, hour = prefs.recapHour)) }
+    }
+
+    /** Sends today's and this week's recap right away, to preview them. */
+    fun sendRecapNow() = viewModelScope.launch {
+        local.update { it.copy(recaps = it.recaps.copy(message = "Preparing…")) }
+        val sent = Recaps.send(getApplication(), forceWeekly = true)
+        local.update { it.copy(recaps = it.recaps.copy(message = if (sent) "Sent. Check your notifications." else "Nothing watched yet to recap.")) }
     }
 
     fun setAlertOwnDevice(on: Boolean) {

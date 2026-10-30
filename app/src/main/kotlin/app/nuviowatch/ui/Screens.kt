@@ -735,6 +735,26 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
                 }
             }
 
+            GlassCard {
+                SectionTitle("Recaps")
+                SettingSwitch("Daily recap", "What everyone watched today.", state.recaps.daily) { vm.setRecaps(daily = it) }
+                Spacer(Modifier.height(10.dp))
+                SettingSwitch("Weekly recap", "Sunday awards: top watcher, show of the week, binge, night owl.", state.recaps.weekly) {
+                    vm.setRecaps(weekly = it)
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("Send at", fontSize = 12.sp, color = TextMuted)
+                Spacer(Modifier.height(6.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(18, 20, 21, 22, 23).forEach { h ->
+                        ChoicePill("%02d:00".format(h), state.recaps.hour == h) { vm.setRecaps(hour = h) }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(onClick = { vm.sendRecapNow() }) { Text("Send recap now") }
+                state.recaps.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = TextMuted, modifier = Modifier.padding(top = 6.dp)) }
+            }
+
             DeviceCard(state, vm)
 
             GlassCard {

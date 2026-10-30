@@ -9,6 +9,7 @@ import app.nuviowatch.core.SessionTracker
 import app.nuviowatch.core.normalizeEpochMs
 import app.nuviowatch.graph
 import app.nuviowatch.live.LiveReceiver
+import app.nuviowatch.widget.NowWidget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -97,6 +98,7 @@ object Monitor {
             prefs.liveEntries = live
             prefs.sessions = sessions
             prefs.lastPollError = null
+            NowWidget.update(context)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

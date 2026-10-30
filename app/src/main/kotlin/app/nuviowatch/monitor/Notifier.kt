@@ -15,6 +15,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import app.nuviowatch.R
+import app.nuviowatch.core.Digest
 import app.nuviowatch.core.LiveEvent
 import app.nuviowatch.core.Profile
 import app.nuviowatch.core.SummaryLine
@@ -31,12 +32,18 @@ object Notifier {
     const val ONGOING_ID = 1
     private const val ALERTS = "watch_alerts"
     private const val ONGOING = "monitor"
+    private const val RECAPS = "recaps"
 
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(ALERTS, "Watching alerts", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "When someone starts watching on Nuvio"
+            },
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(RECAPS, "Daily and weekly recaps", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "What the family watched today and this week"
             },
         )
         manager.createNotificationChannel(
@@ -113,6 +120,23 @@ object Notifier {
             context.imageLoader.execute(ImageRequest.Builder(context).data(url).allowHardware(false).size(256).build())
         }.getOrNull()
         return (result as? SuccessResult)?.drawable?.toBitmap()
+    }
+
+    fun showDigest(context: Context, digest: Digest, id: Int) {
+        if (!canNotify(context)) return
+        val style = NotificationCompat.InboxStyle().setBigContentTitle(digest.title)
+        digest.lines.forEach { style.addLine(it) }
+        val notification = NotificationCompat.Builder(context, RECAPS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(digest.title)
+            .setContentText(digest.summary)
+            .setStyle(style)
+            .setColor(0xFF8C9BFF.toInt())
+            .setContentIntent(openApp(context))
+            .setAutoCancel(true)
+            .build()
+        @Suppress("MissingPermission")
+        NotificationManagerCompat.from(context).notify(id, notification)
     }
 
     fun ongoing(context: Context): Notification {

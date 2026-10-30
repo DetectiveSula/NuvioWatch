@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Nuvio Watch</string>
+    <string name="widget_label">Who\'s watching</string>
+    <string name="widget_description">See who\'s watching Nuvio right now</string>
 </resources>

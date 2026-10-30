@@ -101,6 +101,19 @@ class Prefs(context: Context) : SessionStore {
         get() = prefs.getInt("device_profile", -1).takeIf { it >= 0 }
         set(value) = prefs.edit { putInt("device_profile", value ?: -1) }
 
+    var dailyRecap: Boolean
+        get() = prefs.getBoolean("daily_recap", true)
+        set(value) = prefs.edit { putBoolean("daily_recap", value) }
+
+    /** Hour of the day (0–23) the daily recap arrives; the weekly one comes on Sunday at the same time. */
+    var recapHour: Int
+        get() = prefs.getInt("recap_hour", 21)
+        set(value) = prefs.edit { putInt("recap_hour", value) }
+
+    var weeklyRecap: Boolean
+        get() = prefs.getBoolean("weekly_recap", true)
+        set(value) = prefs.edit { putBoolean("weekly_recap", value) }
+
     /** Normally a phone doesn't alert about its own playback; this turns that on (handy for testing). */
     var alertOwnDevice: Boolean
         get() = prefs.getBoolean("alert_own_device", false)

@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import app.nuviowatch.graph
 import app.nuviowatch.live.LiveHub
 import app.nuviowatch.live.LiveReceiver
+import app.nuviowatch.recap.Recaps
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -171,6 +172,7 @@ class PollReceiver : BroadcastReceiver() {
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val prefs = context.graph.prefs
+        runCatching { Recaps.schedule(context) }
         if (prefs.settings.value.enabled && prefs.signedIn.value) {
             runCatching { MonitorService.start(context) }
         }
