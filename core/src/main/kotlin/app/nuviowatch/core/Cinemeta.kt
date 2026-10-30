@@ -26,6 +26,7 @@ class Cinemeta(
     private data class Meta(
         val name: String? = null,
         val poster: String? = null,
+        val background: String? = null,
         val genres: List<String>? = null,
         val genre: List<String>? = null,
         val runtime: String? = null,
@@ -45,6 +46,7 @@ class Cinemeta(
             TitleInfo(
                 name = meta.name ?: return@use null,
                 poster = meta.poster,
+                background = meta.background,
                 genres = meta.genres ?: meta.genre.orEmpty(),
                 runtimeMinutes = parseRuntimeMinutes(meta.runtime),
                 year = meta.year ?: meta.releaseInfo,

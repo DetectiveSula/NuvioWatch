@@ -93,6 +93,15 @@ class StatsTest {
         assertEquals(100L, stats.days[28].minutes)
         assertEquals(now, stats.lastActivityMs)
         assertEquals(stats.totalWatchedMs / 60_000, stats.hours.sum(), "minutes are spread over hours")
+        assertEquals(java.time.DayOfWeek.MONDAY, stats.days.first().date.dayOfWeek, "heatmap starts on a Monday")
+        assertEquals(mapOf(1 to stats.totalWatchedMs), stats.perProfile)
+        assertEquals(2, stats.longestStreak)
+        assertEquals(2, stats.currentStreak)
+
+        val lastTwoHours = StatsCalculator.compute(viewings, titles, now, ZoneOffset.UTC, sinceMs = now - 2 * 3_600_000)
+        assertEquals(0, lastTwoHours.movies, "yesterday's film is outside the range")
+        assertEquals(stats.days, lastTwoHours.days, "heatmap ignores the range")
+        assertEquals(2, lastTwoHours.longestStreak)
     }
 
     @Test

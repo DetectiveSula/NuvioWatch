@@ -98,6 +98,8 @@ data class WatchedItem(
 data class TitleInfo(
     val name: String,
     val poster: String? = null,
+    /** Wide backdrop image for the "Now playing" card. */
+    val background: String? = null,
     val genres: List<String> = emptyList(),
     /** Typical runtime of the film, or of one episode for a series. */
     val runtimeMinutes: Int? = null,

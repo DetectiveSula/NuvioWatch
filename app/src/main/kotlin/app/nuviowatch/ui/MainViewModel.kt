@@ -29,6 +29,12 @@ import java.time.ZoneId
 
 enum class ServerStatus { DETECTING, READY, NOT_FOUND }
 
+enum class StatsRange(val label: String, val heading: String, val days: Int?) {
+    MONTH("30 days", "Watched in 30 days", 30),
+    YEAR("Year", "Watched this year", 365),
+    ALL("All", "Watched all time", null),
+}
+
 /** What one profile is up to, for the "Now" screen. */
 data class ProfileNow(
     val profile: Profile,
@@ -53,11 +59,14 @@ data class UiState(
     val lastPollError: String? = null,
     val clock: Long = System.currentTimeMillis(),
 ) {
-    fun stats(profileIndex: Int?): Stats = StatsCalculator.compute(
+    fun stats(profileIndex: Int?, range: StatsRange = StatsRange.MONTH): Stats = StatsCalculator.compute(
         viewings.filter { profileIndex == null || it.profileIndex == profileIndex },
         titles,
         clock,
+        sinceMs = range.days?.let { clock - it * 86_400_000L },
     )
+
+    fun profile(index: Int) = snapshot.profiles.firstOrNull { it.index == index }
 
     fun profileName(index: Int) = snapshot.profiles.firstOrNull { it.index == index }?.name ?: "Profile $index"
 }

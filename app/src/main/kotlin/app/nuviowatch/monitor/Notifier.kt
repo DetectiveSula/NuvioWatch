@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -46,27 +47,32 @@ object Notifier {
         Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    fun showAlert(context: Context, alert: WatchAlert, title: TitleInfo?) {
+    fun showAlert(context: Context, alert: WatchAlert, title: TitleInfo?, poster: Bitmap?) {
         if (!canNotify(context)) return
         val entry = alert.entry
         val name = title?.name ?: entry.contentId
         val episode = episodeLabel(entry.season, entry.episode)
         val heading = when (alert.kind) {
-            AlertKind.WATCHING -> "${alert.profile.name} is watching"
+            AlertKind.WATCHING -> "${alert.profile.name} started watching"
             AlertKind.FINISHED -> "${alert.profile.name} finished"
         }
-        val text = listOfNotNull(name, episode).joinToString(" · ")
-        val notification = NotificationCompat.Builder(context, ALERTS)
+        val id = alert.cooldownKey.hashCode()
+        val builder = NotificationCompat.Builder(context, ALERTS)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(heading)
-            .setContentText(text)
+            .setContentText(listOfNotNull(name, episode).joinToString(" · "))
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setColor(0xFFFF5C7A.toInt())
             .setContentIntent(openApp(context))
             .setAutoCancel(true)
-            .build()
+            .addAction(0, "Mute ${alert.profile.name} today", MuteReceiver.intent(context, alert.profile.index, id))
+        if (poster != null) builder.setLargeIcon(poster)
+        if (alert.kind == AlertKind.WATCHING && entry.duration > 0) {
+            builder.setProgress(100, (entry.fraction * 100).toInt(), false)
+        }
         @Suppress("MissingPermission")
-        NotificationManagerCompat.from(context).notify(alert.cooldownKey.hashCode(), notification)
+        NotificationManagerCompat.from(context).notify(id, builder.build())
     }
 
     fun ongoing(context: Context): Notification {

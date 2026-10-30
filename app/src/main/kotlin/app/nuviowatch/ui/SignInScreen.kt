@@ -1,5 +1,6 @@
 package app.nuviowatch.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -14,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -28,6 +30,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -37,12 +40,12 @@ import app.nuviowatch.core.OFFICIAL_SERVER_URL
 @Composable
 fun SignInScreen(state: UiState, vm: MainViewModel) {
     var showServer by rememberSaveable { mutableStateOf(false) }
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    Surface(Modifier.fillMaxSize().background(Ink).glow(DefaultTint), color = Color.Transparent) {
         Column(
             Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
             verticalArrangement = Arrangement.Center,
         ) {
-            Text("Nuvio Watch", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("Nuvio Watch", style = display(38))
             Spacer(Modifier.height(6.dp))
             Text(
                 "Sign in with your Nuvio account to see what every profile is watching.",
@@ -96,6 +99,7 @@ private fun LoginForm(state: UiState, vm: MainViewModel) {
     Spacer(Modifier.height(20.dp))
     Button(
         onClick = { vm.signIn(email, password) },
+        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Ink),
         enabled = !state.loading && email.isNotBlank() && password.isNotEmpty(),
         modifier = Modifier.fillMaxWidth().height(50.dp),
     ) {

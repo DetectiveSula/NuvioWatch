@@ -67,6 +67,10 @@ class Prefs(context: Context) : SessionStore {
     fun cursor(profileId: Int): Long? = prefs.getLong("cursor_$profileId", -1).takeIf { it >= 0 }
     fun setCursor(profileId: Int, value: Long) = prefs.edit { putLong("cursor_$profileId", value) }
 
+    /** Alerts about a profile are paused until this time (set by "Mute today"). */
+    fun mutedUntil(profileId: Int): Long = prefs.getLong("muted_until_$profileId", 0)
+    fun setMutedUntil(profileId: Int, at: Long) = prefs.edit { putLong("muted_until_$profileId", at) }
+
     fun lastAlertAt(key: String): Long? = prefs.getLong("alert_$key", -1).takeIf { it >= 0 }
     fun setLastAlertAt(key: String, at: Long) = prefs.edit { putLong("alert_$key", at) }
 

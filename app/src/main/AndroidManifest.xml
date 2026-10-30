@@ -49,6 +49,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".monitor.MuteReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".monitor.BootReceiver"
             android:exported="true">
             <intent-filter>

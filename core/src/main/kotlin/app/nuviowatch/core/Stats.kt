@@ -37,13 +37,20 @@ data class Stats(
     val inProgress: Int,
     val topTitles: List<TitleTotal>,
     val topGenres: List<Pair<String, Int>>,
+    /** Whole weeks (Monday first) ending today, for the activity heatmap. */
     val days: List<DayTotal>,
     /** Minutes watched per hour of the day, 0–23. */
     val hours: List<Long>,
     val lastActivityMs: Long?,
+    /** Time watched by each profile index. */
+    val perProfile: Map<Int, Long>,
+    /** Most consecutive days with something watched. */
+    val longestStreak: Int,
+    /** Consecutive days up to today (or yesterday) with something watched. */
+    val currentStreak: Int,
 ) {
     companion object {
-        val EMPTY = Stats(0, 0, 0, 0, 0, emptyList(), emptyList(), emptyList(), List(24) { 0L }, null)
+        val EMPTY = Stats(0, 0, 0, 0, 0, emptyList(), emptyList(), emptyList(), List(24) { 0L }, null, emptyMap(), 0, 0)
     }
 }
 
@@ -90,27 +97,46 @@ object StatsCalculator {
         }.sortedByDescending { it.atMs }
     }
 
+    /**
+     * Totals cover viewings since [sinceMs] (everything when null); the heatmap and
+     * streaks always use every viewing so they stay meaningful for short ranges.
+     */
     fun compute(
         viewings: List<Viewing>,
         titles: Map<String, TitleInfo>,
         nowMs: Long,
         zone: ZoneId = ZoneId.systemDefault(),
-        days: Int = 30,
+        weeks: Int = 5,
+        sinceMs: Long? = null,
     ): Stats {
         if (viewings.isEmpty()) return Stats.EMPTY
-        val today = Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate()
-        val firstDay = today.minusDays(days - 1L)
+        fun dateOf(ms: Long) = Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
+        val today = dateOf(nowMs)
+        val firstDay = today.minusDays(today.dayOfWeek.value - 1L).minusWeeks(weeks - 1L)
+
         val perDay = mutableMapOf<LocalDate, Long>()
-        val perHour = LongArray(24)
-        for (v in viewings) {
-            if (v.atMs <= 0) continue
-            val at = Instant.ofEpochMilli(v.atMs).atZone(zone)
-            val minutes = v.watchedMs / 60_000
-            if (!at.toLocalDate().isBefore(firstDay)) perDay.merge(at.toLocalDate(), minutes, Long::plus)
-            perHour[at.hour] += minutes
+        for (v in viewings) if (v.atMs > 0) perDay.merge(dateOf(v.atMs), v.watchedMs / 60_000, Long::plus)
+        val activeDays = perDay.filterValues { it > 0 }.keys.sorted()
+        var longest = 0
+        var run = 0
+        var previous: LocalDate? = null
+        for (day in activeDays) {
+            run = if (previous != null && previous.plusDays(1) == day) run + 1 else 1
+            longest = maxOf(longest, run)
+            previous = day
+        }
+        var current = 0
+        var cursor = if (today in perDay.keys && perDay[today]!! > 0) today else today.minusDays(1)
+        while ((perDay[cursor] ?: 0) > 0) {
+            current++
+            cursor = cursor.minusDays(1)
         }
 
-        val byTitle = viewings.groupBy { it.contentId }
+        val inRange = if (sinceMs == null) viewings else viewings.filter { it.atMs >= sinceMs }
+        val perHour = LongArray(24)
+        for (v in inRange) if (v.atMs > 0) perHour[Instant.ofEpochMilli(v.atMs).atZone(zone).hour] += v.watchedMs / 60_000
+
+        val byTitle = inRange.groupBy { it.contentId }
         val topTitles = byTitle.map { (id, vs) ->
             TitleTotal(id, vs.first().series, vs.sumOf { it.watchedMs }, vs.size, vs.maxOf { it.atMs })
         }.sortedByDescending { it.watchedMs }
@@ -119,16 +145,20 @@ object StatsCalculator {
         for (id in byTitle.keys) titles[id]?.genres?.forEach { genreCounts.merge(it, 1, Int::plus) }
 
         return Stats(
-            totalWatchedMs = viewings.sumOf { it.watchedMs },
-            movies = viewings.count { !it.series && it.completed },
-            episodes = viewings.count { it.series && it.completed },
+            totalWatchedMs = inRange.sumOf { it.watchedMs },
+            movies = inRange.count { !it.series && it.completed },
+            episodes = inRange.count { it.series && it.completed },
             shows = byTitle.values.count { it.first().series },
-            inProgress = viewings.count { !it.completed && it.fraction > 0f },
+            inProgress = inRange.count { !it.completed && it.fraction > 0f },
             topTitles = topTitles.take(10),
             topGenres = genreCounts.entries.sortedByDescending { it.value }.take(8).map { it.key to it.value },
-            days = (0 until days).map { firstDay.plusDays(it.toLong()) }.map { DayTotal(it, perDay[it] ?: 0) },
+            days = generateSequence(firstDay) { it.plusDays(1) }.takeWhile { !it.isAfter(today) }
+                .map { DayTotal(it, perDay[it] ?: 0) }.toList(),
             hours = perHour.toList(),
             lastActivityMs = viewings.maxOf { it.atMs }.takeIf { it > 0 },
+            perProfile = inRange.groupBy { it.profileIndex }.mapValues { (_, vs) -> vs.sumOf { it.watchedMs } },
+            longestStreak = longest,
+            currentStreak = current,
         )
     }
 }

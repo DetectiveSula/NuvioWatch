@@ -1,10 +1,15 @@
 package app.nuviowatch.monitor
 
 import android.content.Context
+import android.graphics.Bitmap
+import androidx.core.graphics.drawable.toBitmap
 import app.nuviowatch.core.AlertPolicy
 import app.nuviowatch.core.Profile
 import app.nuviowatch.core.isSeries
 import app.nuviowatch.graph
+import coil.imageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -51,11 +56,12 @@ object Monitor {
                     if (latest.lastWatchedMs >= (live[profile.index]?.lastWatchedMs ?: 0)) live[profile.index] = latest
                 }
 
-                if (profile.index in settings.mutedProfiles) continue
+                if (profile.index in settings.mutedProfiles || prefs.mutedUntil(profile.index) > now) continue
                 for (alert in policy.evaluate(profile, events, now, prefs::lastAlertAt)) {
                     val entry = alert.entry
                     graph.titles.ensure(entry.contentId, isSeries(entry.contentType, entry.season, entry.videoId))
-                    Notifier.showAlert(context, alert, graph.titles[entry.contentId])
+                    val title = graph.titles[entry.contentId]
+                    Notifier.showAlert(context, alert, title, loadBitmap(context, title?.poster))
                     prefs.setLastAlertAt(alert.cooldownKey, now)
                 }
             }
@@ -68,6 +74,12 @@ object Monitor {
         } finally {
             prefs.lastPollAt = now
         }
+    }
+
+    private suspend fun loadBitmap(context: Context, url: String?): Bitmap? {
+        if (url == null) return null
+        val result = context.imageLoader.execute(ImageRequest.Builder(context).data(url).allowHardware(false).size(256).build())
+        return (result as? SuccessResult)?.drawable?.toBitmap()
     }
 
     /** Clears in-memory state after signing out. */
