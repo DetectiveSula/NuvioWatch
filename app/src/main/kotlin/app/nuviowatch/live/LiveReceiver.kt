@@ -78,6 +78,7 @@ object LiveReceiver {
             profileIndex = profile?.index,
             poster = if (change == LiveChange.STARTED) Notifier.loadBitmap(context, title?.poster) else null,
             silent = change == LiveChange.STOPPED || event.state != PlayState.PLAYING,
+            profileName = profile?.name,
         )
         prefs.setStatus("alert", "Shown: $who ${if (change == LiveChange.STARTED) "started" else "stopped"} watching")
     }

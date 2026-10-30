@@ -50,21 +50,25 @@ class LiveChannel(userId: String) {
     private val key = SecretKeySpec(sha256("nuvio-watch-key:$userId"), "AES")
     private val random = SecureRandom()
 
-    fun encrypt(event: LiveEvent): String {
+    fun encryptText(text: String): String {
         val iv = ByteArray(12).also(random::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv)) }
-        val sealed = cipher.doFinal(NuvioClient.json.encodeToString(event).toByteArray())
-        return Base64.getEncoder().encodeToString(iv + sealed)
+        return Base64.getEncoder().encodeToString(iv + cipher.doFinal(text.toByteArray()))
     }
 
     /** Null for anything that isn't a message from this account. */
-    fun decrypt(message: String): LiveEvent? = runCatching {
+    fun decryptText(message: String): String? = runCatching {
         val bytes = Base64.getDecoder().decode(message.trim())
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
             init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, bytes, 0, 12))
         }
-        NuvioClient.json.decodeFromString<LiveEvent>(String(cipher.doFinal(bytes, 12, bytes.size - 12)))
+        String(cipher.doFinal(bytes, 12, bytes.size - 12))
     }.getOrNull()
+
+    fun encrypt(event: LiveEvent): String = encryptText(NuvioClient.json.encodeToString(event))
+
+    fun decrypt(message: String): LiveEvent? =
+        decryptText(message)?.let { runCatching { NuvioClient.json.decodeFromString<LiveEvent>(it) }.getOrNull() }
 
     private companion object {
         fun sha256(text: String): ByteArray = MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
@@ -81,24 +85,27 @@ class LiveRelay(
     private val sendHttp = http
     private val streamHttp = http.newBuilder().readTimeout(0, TimeUnit.MILLISECONDS).build()
 
-    suspend fun publish(event: LiveEvent) = withContext(Dispatchers.IO) {
+    suspend fun publish(event: LiveEvent) = publishText(NuvioClient.json.encodeToString(event))
+
+    /** Sends any message (playback, reaction, prediction, vote) as encrypted text. */
+    suspend fun publishText(text: String) = withContext(Dispatchers.IO) {
         sendHttp.newCall(
             Request.Builder()
                 .url("$baseUrl/${channel.topic}")
-                .post(channel.encrypt(event).toRequestBody("text/plain".toMediaType()))
+                .post(channel.encryptText(text).toRequestBody("text/plain".toMediaType()))
                 .build(),
         ).execute().use { if (!it.isSuccessful) throw java.io.IOException("Relay returned ${it.code}") }
     }
 
     /**
      * Streams events until the connection drops. [since] is the last message id
-     * seen (or a duration like "10m"); [onEvent] gets each message's id so the
+     * seen (or a duration like "10m"); [onMessage] gets each decrypted message and its id so the
      * caller can resume from it. Returns the id of the last message read.
      */
     suspend fun listen(
         since: String,
         onOpen: () -> Unit = {},
-        onEvent: suspend (id: String, event: LiveEvent) -> Unit,
+        onMessage: suspend (id: String, text: String) -> Unit,
     ): String? = withContext(Dispatchers.IO) {
         var lastId: String? = null
         streamHttp.newCall(Request.Builder().url("$baseUrl/${channel.topic}/json?since=$since").build()).execute().use { response ->
@@ -113,8 +120,8 @@ class LiveRelay(
                 if (kind != "message") continue
                 val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: continue
                 lastId = id
-                val event = obj["message"]?.jsonPrimitive?.contentOrNull?.let(channel::decrypt) ?: continue
-                onEvent(id, event)
+                val text = obj["message"]?.jsonPrimitive?.contentOrNull?.let(channel::decryptText) ?: continue
+                onMessage(id, text)
             }
         }
         lastId

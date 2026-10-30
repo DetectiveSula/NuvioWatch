@@ -14,7 +14,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import app.nuviowatch.graph
 import app.nuviowatch.live.LiveHub
-import app.nuviowatch.live.LiveReceiver
+import app.nuviowatch.live.Inbox
 import app.nuviowatch.recap.Recaps
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -77,10 +77,7 @@ class MonitorService : Service() {
                 relay.listen(
                     since = prefs.liveSince ?: "15m",
                     onOpen = { prefs.setStatus("stream", "Connected, listening") },
-                ) { id, event ->
-                    prefs.setStatus("received", "${event.deviceName}: ${event.state.name.lowercase()} · ${event.title}")
-                    LiveReceiver.onEvent(this, id, event)
-                }
+                ) { id, text -> Inbox.onMessage(this, id, text) }
                 prefs.setStatus("stream", "Disconnected, reconnecting")
                 backoff = 5_000L
             } catch (e: CancellationException) {

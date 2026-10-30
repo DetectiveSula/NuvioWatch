@@ -59,7 +59,11 @@ import androidx.compose.ui.unit.sp
 import app.nuviowatch.core.AbandonedTitle
 import app.nuviowatch.core.BadgeProgress
 import app.nuviowatch.core.Fun
+import app.nuviowatch.core.Outcome
+import app.nuviowatch.core.Prediction
+import app.nuviowatch.core.PredictionKind
 import app.nuviowatch.core.Profile
+import app.nuviowatch.core.Social
 import app.nuviowatch.core.StatsCalculator
 import app.nuviowatch.core.UpNext
 import app.nuviowatch.core.Wrapped
@@ -78,7 +82,7 @@ private sealed interface FamilyPage {
 
 /** Leaderboard, Wrapped, picks, unfinished shows and everyone's profile pages. */
 @Composable
-fun FamilyScreen(state: UiState) {
+fun FamilyScreen(state: UiState, vm: MainViewModel) {
     var personIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     var storyMonthsAgo by rememberSaveable { mutableStateOf<Int?>(null) }
     val page: FamilyPage = when {
@@ -91,7 +95,7 @@ fun FamilyScreen(state: UiState) {
     }
     AnimatedContent(targetState = page, label = "family") { current ->
         when (current) {
-            FamilyPage.Home -> FamilyHome(state, onPerson = { personIndex = it }, onStory = { storyMonthsAgo = it })
+            FamilyPage.Home -> FamilyHome(state, vm, onPerson = { personIndex = it }, onStory = { storyMonthsAgo = it })
             is FamilyPage.Person -> ProfilePage(state, current.index, onBack = { personIndex = null })
             is FamilyPage.Story -> WrappedStory(state, current.monthsAgo, onClose = { storyMonthsAgo = null })
         }
@@ -101,7 +105,7 @@ fun FamilyScreen(state: UiState) {
 // ---------------------------------------------------------------- Home
 
 @Composable
-private fun FamilyHome(state: UiState, onPerson: (Int) -> Unit, onStory: (Int) -> Unit) {
+private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Unit, onStory: (Int) -> Unit) {
     val profiles = state.snapshot.profiles
     val indexes = profiles.map { it.index }
     val board = remember(state.viewings, state.clock / 600_000) { Fun.leaderboard(state.viewings, indexes, state.clock) }
@@ -155,6 +159,8 @@ private fun FamilyHome(state: UiState, onPerson: (Int) -> Unit, onStory: (Int) -
                     color = TextMuted,
                 )
             }
+
+            PredictionsCard(state, vm)
 
             // Up next
             val queue = remember(state.viewings, state.episodes, state.clock / 3_600_000) { Fun.upNext(state.viewings, state.episodes, state.clock) }
@@ -346,6 +352,145 @@ private fun airsIn(releasedMs: Long, nowMs: Long): String {
         days < 7 -> "In $days days"
         else -> "Airs " + java.time.Instant.ofEpochMilli(releasedMs).atZone(java.time.ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("d MMM"))
     }
+}
+
+// ---------------------------------------------------------------- Predictions
+
+@Composable
+private fun PredictionsCard(state: UiState, vm: MainViewModel) {
+    var creating by rememberSaveable { mutableStateOf(false) }
+    val predictions = state.social.predictions.sortedByDescending { it.createdAt }.take(8)
+    GlassCard(padding = 18.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("PREDICTIONS", style = Eyebrow, color = TextMuted, modifier = Modifier.weight(1f))
+            Text(
+                if (creating) "Cancel" else "+ New",
+                modifier = Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button) { creating = !creating }.padding(horizontal = 10.dp, vertical = 6.dp),
+                color = Color(0xFFC3CAFF),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+            )
+        }
+        if (creating) {
+            Spacer(Modifier.height(10.dp))
+            NewPrediction(state) { profile, kind, contentId, season, hours, deadline ->
+                vm.predict(profile, kind, contentId, season, hours, deadline)
+                creating = false
+            }
+        }
+        if (predictions.isEmpty() && !creating) {
+            Spacer(Modifier.height(8.dp))
+            Text("Bet on what the family will do, like \"Will Mani finish the season by Sunday?\" Everyone votes, and the app settles it from Nuvio.", fontSize = 13.sp, color = TextMuted)
+        }
+        predictions.forEach { p -> PredictionRow(p, state, vm) }
+    }
+}
+
+@Composable
+private fun PredictionRow(p: Prediction, state: UiState, vm: MainViewModel) {
+    val outcome = remember(p, state.viewings, state.episodes, state.clock / 60_000) { Social.resolve(p, state.viewings, state.episodes, state.clock) }
+    val tally = Social.tally(p.id, state.social.votes)
+    val myVote = state.social.votes.filter { it.predictionId == p.id && it.voterId == state.social.myDeviceId }.maxByOrNull { it.at }?.yes
+    val title = p.contentId?.let { state.titles[it]?.name }
+    Column(Modifier.padding(top = 14.dp)) {
+        Text(Social.question(p, state.profileName(p.profileIndex), title, deadlineLabel(p.deadlineMs)), fontWeight = FontWeight.SemiBold)
+        Text("by ${p.byName}", fontSize = 11.sp, color = TextMuted)
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            when (outcome) {
+                Outcome.PENDING -> {
+                    VoteButton("👍 Yes · ${tally.yes.size}", myVote == true) { vm.vote(p.id, true) }
+                    Spacer(Modifier.width(8.dp))
+                    VoteButton("👎 No · ${tally.no.size}", myVote == false) { vm.vote(p.id, false) }
+                }
+                Outcome.YES -> Pill("✅ It happened · ${tally.yes.joinToString().ifEmpty { "nobody" }} called it", Color(0xFF7CE0C3))
+                Outcome.NO -> Pill("❌ Didn't happen · ${tally.no.joinToString().ifEmpty { "nobody" }} called it", Color(0xFFFF8AA0))
+            }
+        }
+        if (outcome == Outcome.PENDING && (tally.yes.isNotEmpty() || tally.no.isNotEmpty())) {
+            Text(
+                listOfNotNull(
+                    tally.yes.takeIf { it.isNotEmpty() }?.let { "Yes: ${it.joinToString()}" },
+                    tally.no.takeIf { it.isNotEmpty() }?.let { "No: ${it.joinToString()}" },
+                ).joinToString(" · "),
+                fontSize = 11.sp,
+                color = TextMuted,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun VoteButton(label: String, active: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Text(
+        label,
+        modifier = Modifier
+            .clip(shape)
+            .background(if (active) Color.White else Color(0x14FFFFFF))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        color = if (active) Ink else TextPrimary,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 13.sp,
+    )
+}
+
+/** Pick a person, what they'll do, and by when. */
+@Composable
+private fun NewPrediction(state: UiState, onCreate: (Int, PredictionKind, String?, Int?, Int?, Long) -> Unit) {
+    val profiles = state.snapshot.profiles
+    var who by rememberSaveable { mutableStateOf(profiles.firstOrNull()?.index) }
+    var choice by rememberSaveable { mutableStateOf<String?>(null) }
+    var deadlineDays by rememberSaveable { mutableStateOf(7) }
+
+    Text("Who?", fontSize = 12.sp, color = TextMuted)
+    Spacer(Modifier.height(6.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        profiles.forEach { p -> SmallChoice(p.name, who == p.index) { who = p.index; choice = null } }
+    }
+
+    val person = who ?: return
+    val mine = state.viewings.filter { it.profileIndex == person }
+    // Things they're in the middle of: seasons of followed shows, unfinished films.
+    val seasons = Fun.upNext(mine, state.episodes, state.clock).map { it.contentId to it.next.season }.distinct().take(4)
+    val films = mine.filter { !it.series && !it.completed && it.fraction > 0f }.map { it.contentId }.distinct().take(3)
+    data class Option(val key: String, val label: String, val kind: PredictionKind, val contentId: String?, val season: Int?, val hours: Int?)
+    val options = seasons.map { (id, season) -> Option("s|$id|$season", "Finish ${state.titles[id]?.name ?: id} S$season", PredictionKind.FINISH_SEASON, id, season, null) } +
+        films.map { id -> Option("f|$id", "Finish ${state.titles[id]?.name ?: id}", PredictionKind.FINISH_FILM, id, null, null) } +
+        listOf(3, 5, 10).map { h -> Option("h|$h", "Watch $h+ hours", PredictionKind.WATCH_HOURS, null, null, h) }
+
+    Spacer(Modifier.height(12.dp))
+    Text("Will they…", fontSize = 12.sp, color = TextMuted)
+    Spacer(Modifier.height(6.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { o -> SmallChoice(o.label, choice == o.key) { choice = o.key } }
+    }
+
+    Spacer(Modifier.height(12.dp))
+    Text("By…", fontSize = 12.sp, color = TextMuted)
+    Spacer(Modifier.height(6.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(0 to "Tonight", 3 to "3 days", 7 to "A week").forEach { (d, label) -> SmallChoice(label, deadlineDays == d) { deadlineDays = d } }
+    }
+
+    val selected = options.firstOrNull { it.key == choice }
+    Spacer(Modifier.height(14.dp))
+    Text(
+        "Make prediction",
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (selected != null) Color.White else Color(0x14FFFFFF))
+            .clickable(enabled = selected != null, role = Role.Button) {
+                val zone = java.time.ZoneId.systemDefault()
+                val deadline = LocalDate.now(zone).plusDays(deadlineDays.toLong()).atTime(23, 59).atZone(zone).toInstant().toEpochMilli()
+                selected?.let { onCreate(person, it.kind, it.contentId, it.season, it.hours, deadline) }
+            }
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        color = if (selected != null) Ink else TextMuted,
+        fontWeight = FontWeight.Bold,
+    )
 }
 
 // ---------------------------------------------------------------- Profile page

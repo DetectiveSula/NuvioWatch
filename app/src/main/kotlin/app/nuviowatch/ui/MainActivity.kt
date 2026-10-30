@@ -66,8 +66,8 @@ private fun MainScreen(state: UiState, vm: MainViewModel) {
                 } else {
                     PullToRefreshBox(isRefreshing = state.loading, onRefresh = { vm.refresh() }, modifier = Modifier.fillMaxSize()) {
                         when (current) {
-                            0 -> NowScreen(state, onOpenSettings = { tab = SETTINGS_TAB })
-                            1 -> FamilyScreen(state)
+                            0 -> NowScreen(state, vm, onOpenSettings = { tab = SETTINGS_TAB })
+                            1 -> FamilyScreen(state, vm)
                             2 -> StatsScreen(state)
                             else -> HistoryScreen(state)
                         }

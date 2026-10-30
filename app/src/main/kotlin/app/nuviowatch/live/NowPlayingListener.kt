@@ -14,6 +14,9 @@ import app.nuviowatch.core.LiveEvent
 import app.nuviowatch.core.PlayState
 import app.nuviowatch.graph
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -32,6 +35,8 @@ class NowPlayingListener : NotificationListenerService() {
     private val watched = mutableMapOf<String, MediaController>()
     private var lastSent: LiveEvent? = null
     private var sessions: MediaSessionManager? = null
+    /** While Nuvio plays here, listen too, so reactions reach this device even with alerts off. */
+    private var listening: Job? = null
 
     private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
         attach(controllers.orEmpty())
@@ -125,6 +130,7 @@ class NowPlayingListener : NotificationListenerService() {
         if (!changed && !force) return
         if (event.title.isBlank()) return
         lastSent = event
+        updateListening(event.state != PlayState.STOPPED)
         scope.launch {
             val relay = LiveHub.relay(this@NowPlayingListener)
             if (relay == null) {
@@ -134,6 +140,24 @@ class NowPlayingListener : NotificationListenerService() {
             runCatching { relay.publish(event) }
                 .onSuccess { prefs.setStatus("send", "Sent \"${event.state.name.lowercase()}\" · ${event.title}") }
                 .onFailure { prefs.setStatus("send", "Send failed: ${it.message}") }
+        }
+    }
+
+    private fun updateListening(active: Boolean) {
+        if (!active) {
+            listening?.cancel()
+            listening = null
+            return
+        }
+        if (listening?.isActive == true) return
+        listening = scope.launch {
+            while (isActive) {
+                val relay = LiveHub.relay(this@NowPlayingListener) ?: break
+                runCatching {
+                    relay.listen(since = "1m") { id, text -> Inbox.onMessage(this@NowPlayingListener, id, text) }
+                }
+                delay(10_000)
+            }
         }
     }
 

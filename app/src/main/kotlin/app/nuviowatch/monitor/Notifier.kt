@@ -17,6 +17,8 @@ import androidx.core.graphics.drawable.toBitmap
 import app.nuviowatch.R
 import app.nuviowatch.core.Digest
 import app.nuviowatch.core.LiveEvent
+import app.nuviowatch.core.Prediction
+import app.nuviowatch.core.Reaction
 import app.nuviowatch.core.Profile
 import app.nuviowatch.core.SummaryLine
 import app.nuviowatch.core.WatchSession
@@ -89,11 +91,32 @@ object Notifier {
     }
 
     /** "Ishti started watching" from another device, updated in place when they stop. */
-    fun showLive(context: Context, event: LiveEvent, heading: String, profileIndex: Int?, poster: Bitmap?, silent: Boolean) {
+    /**
+     * Live alerts about each person use their own channel, so each can have a
+     * different sound and vibration (set in Android's notification settings).
+     */
+    fun personChannel(context: Context, profileIndex: Int, name: String): String {
+        val id = "person_$profileIndex"
+        val manager = context.getSystemService(NotificationManager::class.java)
+        if (manager.getNotificationChannel(id) == null) {
+            manager.createNotificationChannel(
+                NotificationChannel(id, "$name starts watching", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "Live alerts when $name presses play"
+                    enableVibration(true)
+                    // A different rhythm per person, so you can tell who it is without looking.
+                    vibrationPattern = longArrayOf(0) + LongArray((profileIndex % 4) + 1) { 120L }.flatMap { listOf(it, 90L) }
+                }
+            )
+        }
+        return id
+    }
+
+    fun showLive(context: Context, event: LiveEvent, heading: String, profileIndex: Int?, poster: Bitmap?, silent: Boolean, profileName: String? = null) {
         if (!canNotify(context)) return
         val id = "live|${event.deviceId}".hashCode()
         val text = listOfNotNull(event.title, event.subtitle?.takeIf { it.isNotBlank() }, "on ${event.deviceName}").joinToString(" · ")
-        val builder = NotificationCompat.Builder(context, ALERTS)
+        val channel = if (profileIndex != null && profileName != null) personChannel(context, profileIndex, profileName) else ALERTS
+        val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(heading)
             .setContentText(text)
@@ -137,6 +160,52 @@ object Notifier {
             .build()
         @Suppress("MissingPermission")
         NotificationManagerCompat.from(context).notify(id, notification)
+    }
+
+    fun showReaction(context: Context, r: Reaction) {
+        if (!canNotify(context)) return
+        val notification = NotificationCompat.Builder(context, ALERTS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("${r.fromName} reacted ${r.emoji}")
+            .setContentText("to ${r.title}")
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setTimeoutAfter(60_000)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context))
+            .build()
+        @Suppress("MissingPermission")
+        NotificationManagerCompat.from(context).notify(r.id.hashCode(), notification)
+    }
+
+    fun showPrediction(context: Context, p: Prediction) {
+        if (!canNotify(context)) return
+        val notification = NotificationCompat.Builder(context, ALERTS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("🔮 ${p.byName} made a prediction")
+            .setContentText("Open the Family tab to vote")
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context))
+            .build()
+        @Suppress("MissingPermission")
+        NotificationManagerCompat.from(context).notify(p.id.hashCode(), notification)
+    }
+
+    fun showPredictionResult(context: Context, question: String, cameTrue: Boolean, winners: List<String>) {
+        if (!canNotify(context)) return
+        val text = (if (cameTrue) "It happened! " else "It didn't happen. ") +
+            if (winners.isEmpty()) "Nobody called it." else "Called it: ${winners.joinToString()}"
+        val notification = NotificationCompat.Builder(context, RECAPS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(if (cameTrue) "✅ $question" else "❌ $question")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context))
+            .build()
+        @Suppress("MissingPermission")
+        NotificationManagerCompat.from(context).notify(question.hashCode(), notification)
     }
 
     fun ongoing(context: Context): Notification {

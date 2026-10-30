@@ -77,7 +77,7 @@ class LiveTest {
             ),
         )
         val received = mutableListOf<LiveEvent>()
-        val last = relay.listen("10m") { _, event -> received += event }
+        val last = relay.listen("10m") { _, text -> (Social.parse(text) as? LiveEvent)?.let { received += it } }
         assertEquals(listOf(PlayState.PAUSED), received.map { it.state })
         assertEquals("m2", last)
         assertTrue(server.takeRequest().path!!.endsWith("/json?since=10m"))

@@ -7,6 +7,9 @@ import app.nuviowatch.core.ProgressEntry
 import app.nuviowatch.core.ServerConfig
 import app.nuviowatch.core.Session
 import app.nuviowatch.core.LiveEvent
+import app.nuviowatch.core.Prediction
+import app.nuviowatch.core.Reaction
+import app.nuviowatch.core.Vote
 import app.nuviowatch.core.SessionStore
 import app.nuviowatch.core.WatchSession
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -146,7 +149,28 @@ class Prefs(context: Context) : SessionStore {
     fun status(part: String): Pair<String, Long>? =
         prefs.getString("status_$part", null)?.let { it to prefs.getLong("status_at_$part", 0) }
 
-    /** Alerts about a profile are paused until this time (set by "Mute today"). */
+    var reactions: List<Reaction>
+        get() = prefs.getString("reactions", null)?.let { runCatching { json.decodeFromString<List<Reaction>>(it) }.getOrNull() }.orEmpty()
+        set(value) = prefs.edit { putString("reactions", json.encodeToString(value.takeLast(40))) }
+
+    var predictions: List<Prediction>
+        get() = prefs.getString("predictions", null)?.let { runCatching { json.decodeFromString<List<Prediction>>(it) }.getOrNull() }.orEmpty()
+        set(value) = prefs.edit { putString("predictions", json.encodeToString(value.takeLast(50))) }
+
+    var votes: List<Vote>
+        get() = prefs.getString("votes", null)?.let { runCatching { json.decodeFromString<List<Vote>>(it) }.getOrNull() }.orEmpty()
+        set(value) = prefs.edit { putString("votes", json.encodeToString(value.takeLast(300))) }
+
+    /** Predictions whose result has already been announced. */
+    var announcedPredictions: Set<String>
+        get() = prefs.getStringSet("announced_predictions", emptySet()).orEmpty()
+        set(value) = prefs.edit { putStringSet("announced_predictions", value) }
+
+    /** Name this device uses when reacting or voting: its profile, else its device name. */
+    fun myName(profiles: List<app.nuviowatch.core.Profile>): String =
+        deviceProfile?.let { index -> profiles.firstOrNull { it.index == index }?.name } ?: deviceName
+
+        /** Alerts about a profile are paused until this time (set by "Mute today"). */
     fun mutedUntil(profileId: Int): Long = prefs.getLong("muted_until_$profileId", 0)
     fun setMutedUntil(profileId: Int, at: Long) = prefs.edit { putLong("muted_until_$profileId", at) }
 

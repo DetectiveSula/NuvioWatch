@@ -60,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -78,6 +79,7 @@ import app.nuviowatch.core.PlayState
 import app.nuviowatch.core.Profile
 import app.nuviowatch.core.Viewing
 import app.nuviowatch.core.episodeLabel
+import app.nuviowatch.live.LiveHub
 import app.nuviowatch.monitor.Notifier
 import coil.compose.AsyncImage
 import java.time.Instant
@@ -140,7 +142,7 @@ private fun ProfileChips(state: UiState, selected: Int?, onSelect: (Int?) -> Uni
 // ---------------------------------------------------------------- Now
 
 @Composable
-fun NowScreen(state: UiState, onOpenSettings: () -> Unit) {
+fun NowScreen(state: UiState, vm: MainViewModel, onOpenSettings: () -> Unit) {
     val hero = state.now.filter { it.latest != null }.maxWithOrNull(
         compareBy<ProfileNow>({ AlertPolicy.liveState(it.latest, state.clock) == LiveState.ACTIVE_NOW }, { it.latest!!.lastWatchedMs }),
     )
@@ -149,10 +151,43 @@ fun NowScreen(state: UiState, onOpenSettings: () -> Unit) {
     val tint = rememberImageTint(heroInfo?.poster)
     val others = state.now.filter { if (live != null) it.profile.index != live.profile?.index else it != hero }
 
+    val burst = state.social.reactions.lastOrNull()?.takeIf { state.clock - it.at < 15_000 && it.fromDeviceId != state.social.myDeviceId }
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxSize().glow(tint)) {
-        item(key = "hero") { if (live != null) LiveHero(state, live, tint) else Hero(state, hero, tint) }
+        item(key = "hero") {
+            if (live != null) LiveHero(state, live, tint, onReact = { vm.react(live, it) }) else Hero(state, hero, tint)
+        }
         state.liveNow.drop(1).forEach { other ->
-            item(key = "live-${other.event.deviceId}") { LiveRow(other, state.clock) }
+            item(key = "live-${other.event.deviceId}") { LiveRow(other, state.clock, onReact = { vm.react(other, it) }) }
+        }
+        state.social.message?.let { msg ->
+            item(key = "social-msg") { Text(msg, fontSize = 12.sp, color = TextMuted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
+        }
+        val recent = state.social.reactions.filter { state.clock - it.at < 3 * 3_600_000L }.takeLast(6).reversed()
+        if (recent.isNotEmpty()) {
+            item(key = "reactions") {
+                Column(Modifier.padding(top = 16.dp)) {
+                    Box(Modifier.padding(horizontal = 20.dp)) { SectionTitle("Reactions") }
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
+                        items(recent, key = { it.id }) { r ->
+                            val to = r.toProfile?.let { state.profileName(it) } ?: "TV"
+                            Row(
+                                Modifier.clip(RoundedCornerShape(50)).background(Glass).border(1.dp, GlassBorder, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(r.emoji, fontSize = 18.sp)
+                                Spacer(Modifier.width(6.dp))
+                                Text("${r.fromName} → $to", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.width(6.dp))
+                                Text(timeAgo(r.at, state.clock), fontSize = 11.sp, color = TextMuted)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (state.devices.isNotEmpty()) {
+            item(key = "devices") { DeviceStrip(state) }
         }
 
         if (!state.settings.enabled) {
@@ -198,6 +233,77 @@ fun NowScreen(state: UiState, onOpenSettings: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 20.dp),
             )
             Spacer(Modifier.navigationBarsPadding().height(BottomSpace))
+        }
+    }
+        // A reaction just arrived: show it big for a moment.
+        burst?.let { r ->
+            val scale = remember(r.id) { Animatable(0.2f) }
+            LaunchedEffect(r.id) { scale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.45f)) }
+            Column(
+                Modifier.align(Alignment.Center).padding(bottom = 120.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(r.emoji, fontSize = 110.sp, modifier = Modifier.graphicsLayer { scaleX = scale.value; scaleY = scale.value })
+                Text("${r.fromName} reacted", style = display(20), color = Color.White)
+            }
+        }
+    }
+}
+
+/** Every device in the house: what it's playing, or how long it's been idle. */
+@Composable
+private fun DeviceStrip(state: UiState) {
+    Column(Modifier.padding(top = 16.dp)) {
+        Box(Modifier.padding(horizontal = 20.dp)) { SectionTitle("Devices") }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
+            items(state.devices, key = { it.deviceId }) { d ->
+                val fresh = state.clock - d.at < 5 * 60_000L
+                val playing = fresh && d.state == PlayState.PLAYING
+                val paused = fresh && d.state == PlayState.PAUSED
+                val shape = RoundedCornerShape(18.dp)
+                Column(
+                    Modifier
+                        .width(150.dp)
+                        .clip(shape)
+                        .background(if (playing) Color(0x1FFF5C7A) else Glass)
+                        .border(1.dp, if (playing) Color(0x66FF5C7A) else GlassBorder, shape)
+                        .padding(12.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (playing) "▶" else if (paused) "❚❚" else "■", fontSize = 12.sp, color = if (playing) LiveRed else TextMuted)
+                        Spacer(Modifier.width(6.dp))
+                        Text(d.deviceName, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        when {
+                            playing || paused -> LiveHub.titleFor(d, state.titles)?.name ?: d.title
+                            else -> "Idle · ${timeAgo(d.at, state.clock)}"
+                        },
+                        fontSize = 12.sp,
+                        color = if (playing || paused) TextPrimary else TextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if ((playing || paused) && d.durationMs > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        ThinProgress(LiveTracker.estimatedPosition(d, state.clock).toFloat() / d.durationMs, if (playing) LiveRed else TextMuted, height = 3.dp, track = Color(0x1AFFFFFF))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Quick emoji reactions to whoever is watching. */
+@Composable
+private fun ReactionBar(onReact: (String) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf("🔥", "😂", "😱", "😭", "💤", "👏", "❤️").forEach { e ->
+            Box(
+                Modifier.size(40.dp).clip(CircleShape).background(Color(0x26FFFFFF)).clickable(role = Role.Button, onClickLabel = "React $e") { onReact(e) },
+                contentAlignment = Alignment.Center,
+            ) { Text(e, fontSize = 20.sp) }
         }
     }
 }
@@ -278,7 +384,7 @@ private fun Hero(state: UiState, hero: ProfileNow?, tint: Color) {
 
 /** The hero when a device is reporting Nuvio playback right now. */
 @Composable
-private fun LiveHero(state: UiState, live: LiveNow, tint: Color) {
+private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (String) -> Unit) {
     val event = live.event
     val playing = event.state == PlayState.PLAYING
     val position = LiveTracker.estimatedPosition(event, state.clock)
@@ -331,13 +437,17 @@ private fun LiveHero(state: UiState, live: LiveNow, tint: Color) {
                     Text(formatClock(event.durationMs), style = MaterialTheme.typography.labelSmall, color = Color(0xFFD6D1E6))
                 }
             }
+            if (event.deviceId != state.social.myDeviceId) {
+                Spacer(Modifier.height(4.dp))
+                ReactionBar(onReact)
+            }
         }
     }
 }
 
 /** Extra devices playing at the same time. */
 @Composable
-private fun LiveRow(live: LiveNow, now: Long) {
+private fun LiveRow(live: LiveNow, now: Long, onReact: (String) -> Unit) {
     val playing = live.event.state == PlayState.PLAYING
     GlassCard(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), padding = 12.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -363,6 +473,8 @@ private fun LiveRow(live: LiveNow, now: Long) {
             Spacer(Modifier.height(10.dp))
             ThinProgress(LiveTracker.estimatedPosition(live.event, now).toFloat() / live.event.durationMs, Accent, height = 3.dp, track = Color(0x1AFFFFFF))
         }
+        Spacer(Modifier.height(10.dp))
+        ReactionBar(onReact)
     }
 }
 
@@ -753,6 +865,35 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton(onClick = { vm.sendRecapNow() }) { Text("Send recap now") }
                 state.recaps.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = TextMuted, modifier = Modifier.padding(top = 6.dp)) }
+            }
+
+            if (state.snapshot.profiles.isNotEmpty()) {
+                GlassCard {
+                    SectionTitle("Sound for each person")
+                    Text(
+                        "Give each person their own alert sound and vibration, so you know who pressed play without looking.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextMuted,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    state.snapshot.profiles.forEach { p ->
+                        Row(Modifier.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            ProfileAvatar(p, size = 30.dp)
+                            Spacer(Modifier.width(12.dp))
+                            Text(p.name, Modifier.weight(1f))
+                            OutlinedButton(onClick = {
+                                val channel = Notifier.personChannel(context, p.index, p.name)
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                            .putExtra(Settings.EXTRA_CHANNEL_ID, channel),
+                                    )
+                                }
+                            }) { Text("Sound") }
+                        }
+                    }
+                }
             }
 
             DeviceCard(state, vm)

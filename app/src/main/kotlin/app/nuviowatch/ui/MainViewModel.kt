@@ -5,6 +5,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.nuviowatch.core.EpisodeInfo
 import app.nuviowatch.core.LiveEvent
+import app.nuviowatch.core.Outcome
+import app.nuviowatch.core.Prediction
+import app.nuviowatch.core.PredictionKind
+import app.nuviowatch.core.Reaction
+import app.nuviowatch.core.Social
+import app.nuviowatch.core.Vote
 import app.nuviowatch.core.PlayState
 import app.nuviowatch.core.Profile
 import app.nuviowatch.core.ProgressEntry
@@ -15,7 +21,9 @@ import app.nuviowatch.core.Viewing
 import app.nuviowatch.data.MonitorSettings
 import app.nuviowatch.data.Snapshot
 import app.nuviowatch.graph
+import app.nuviowatch.live.Inbox
 import app.nuviowatch.live.LiveHub
+import app.nuviowatch.monitor.Notifier
 import app.nuviowatch.live.LiveReceiver
 import app.nuviowatch.live.NowPlayingListener
 import app.nuviowatch.recap.Recaps
@@ -39,6 +47,14 @@ enum class ServerStatus { DETECTING, READY, NOT_FOUND }
 
 /** A device where Nuvio is playing or paused right now. */
 data class LiveNow(val event: LiveEvent, val profile: Profile?, val info: TitleInfo?)
+
+data class SocialState(
+    val reactions: List<Reaction> = emptyList(),
+    val predictions: List<Prediction> = emptyList(),
+    val votes: List<Vote> = emptyList(),
+    val myDeviceId: String = "",
+    val message: String? = null,
+)
 
 data class RecapSettings(val daily: Boolean = true, val weekly: Boolean = true, val hour: Int = 21, val message: String? = null)
 
@@ -88,6 +104,9 @@ data class UiState(
     val testMessage: String? = null,
     val recaps: RecapSettings = RecapSettings(),
     val episodes: Map<String, List<EpisodeInfo>> = emptyMap(),
+    val social: SocialState = SocialState(),
+    /** Every device that has reported, newest first, including idle ones. */
+    val devices: List<LiveEvent> = emptyList(),
 ) {
     fun stats(profileIndex: Int?, range: StatsRange = StatsRange.MONTH): Stats = StatsCalculator.compute(
         viewings.filter { profileIndex == null || it.profileIndex == profileIndex },
@@ -102,6 +121,7 @@ data class UiState(
 }
 
 private data class Local(
+    val social: SocialState = SocialState(),
     val episodes: Map<String, List<EpisodeInfo>> = emptyMap(),
     val recaps: RecapSettings = RecapSettings(),
     val statuses: List<Pair<String, String>> = emptyList(),
@@ -157,10 +177,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             testMessage = local.testMessage,
             recaps = local.recaps,
             episodes = local.episodes,
+            social = local.social,
+            devices = local.liveDevices.values.sortedByDescending { it.at },
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
     init {
+        // Announce predictions as they settle.
+        viewModelScope.launch {
+            while (true) {
+                delay(60_000)
+                announceSettledPredictions()
+            }
+        }
         viewModelScope.launch { graph.episodes.episodes.collect { e -> local.update { it.copy(episodes = e) } } }
         detectServer()
         if (prefs.signedIn.value) refresh()
@@ -172,6 +201,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         liveDevices = prefs.liveDevices,
                         device = deviceSettings(),
                         statuses = statuses(),
+                        social = it.social.copy(reactions = prefs.reactions, predictions = prefs.predictions, votes = prefs.votes, myDeviceId = prefs.deviceId),
                         recaps = it.recaps.copy(daily = prefs.dailyRecap, weekly = prefs.weeklyRecap, hour = prefs.recapHour),
                         live = prefs.liveEntries,
                         lastPollAt = prefs.lastPollAt,
@@ -261,6 +291,51 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         local.update { it.copy(recaps = it.recaps.copy(message = if (sent) "Sent. Check your notifications." else "Nothing watched yet to recap.")) }
     }
 
+    fun react(live: LiveNow, emoji: String) = viewModelScope.launch {
+        val ok = Inbox.react(getApplication(), live.event, live.profile?.index, emoji)
+        val who = live.profile?.name ?: live.event.deviceName
+        local.update { it.copy(social = it.social.copy(reactions = prefs.reactions, message = if (ok) "Sent $emoji to $who" else "Couldn't send, check your connection")) }
+    }
+
+    fun predict(profileIndex: Int, kind: PredictionKind, contentId: String?, season: Int?, hours: Int?, deadlineMs: Long) = viewModelScope.launch {
+        val prediction = Prediction(
+            id = java.util.UUID.randomUUID().toString(),
+            byName = prefs.myName(state.value.snapshot.profiles),
+            profileIndex = profileIndex,
+            kind = kind,
+            contentId = contentId,
+            season = season,
+            hours = hours,
+            deadlineMs = deadlineMs,
+            createdAt = System.currentTimeMillis(),
+        )
+        Inbox.predict(getApplication(), prediction)
+        local.update { it.copy(social = it.social.copy(predictions = prefs.predictions)) }
+    }
+
+    fun vote(predictionId: String, yes: Boolean) = viewModelScope.launch {
+        Inbox.vote(getApplication(), predictionId, yes)
+        local.update { it.copy(social = it.social.copy(votes = prefs.votes)) }
+    }
+
+    private fun announceSettledPredictions() {
+        val current = state.value
+        if (current.viewings.isEmpty()) return
+        val announced = prefs.announcedPredictions
+        val newlyAnnounced = mutableSetOf<String>()
+        for (p in prefs.predictions) {
+            if (p.id in announced) continue
+            val outcome = Social.resolve(p, current.viewings, current.episodes, System.currentTimeMillis())
+            if (outcome == Outcome.PENDING) continue
+            val tally = Social.tally(p.id, prefs.votes)
+            val title = p.contentId?.let { current.titles[it]?.name }
+            val question = Social.question(p, current.profileName(p.profileIndex), title, deadlineLabel(p.deadlineMs))
+            Notifier.showPredictionResult(getApplication(), question, outcome == Outcome.YES, if (outcome == Outcome.YES) tally.yes else tally.no)
+            newlyAnnounced += p.id
+        }
+        if (newlyAnnounced.isNotEmpty()) prefs.announcedPredictions = announced + newlyAnnounced
+    }
+
     fun setAlertOwnDevice(on: Boolean) {
         prefs.alertOwnDevice = on
         local.update { it.copy(device = deviceSettings()) }
@@ -346,3 +421,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
 /** A live report older than this is ignored (the device probably went off). */
 private const val LIVE_FRESH_MS = 5 * 60_000L
+
+/** "today 23:59", "Sunday" or "8 Nov", for prediction questions. */
+fun deadlineLabel(ms: Long): String {
+    val zone = java.time.ZoneId.systemDefault()
+    val date = java.time.Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
+    val today = java.time.LocalDate.now(zone)
+    return when {
+        date == today -> "tonight"
+        date.isBefore(today.plusDays(7)) -> date.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault())
+        else -> date.format(java.time.format.DateTimeFormatter.ofPattern("d MMM"))
+    }
+}
