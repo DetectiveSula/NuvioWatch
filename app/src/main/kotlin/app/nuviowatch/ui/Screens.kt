@@ -776,6 +776,13 @@ private fun DeviceCard(state: UiState, vm: MainViewModel) {
             checked = device.reportPlayback,
         ) { vm.setReportPlayback(it) }
 
+        Spacer(Modifier.height(12.dp))
+        SettingSwitch(
+            title = "Also alert about this device",
+            subtitle = "Off by default, since you know what you're watching. Turn on to test with one phone.",
+            checked = device.alertOwnDevice,
+        ) { vm.setAlertOwnDevice(it) }
+
         if (device.reportPlayback) {
             Spacer(Modifier.height(12.dp))
             if (device.hasAccess) {

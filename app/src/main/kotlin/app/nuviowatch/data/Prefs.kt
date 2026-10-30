@@ -101,6 +101,11 @@ class Prefs(context: Context) : SessionStore {
         get() = prefs.getInt("device_profile", -1).takeIf { it >= 0 }
         set(value) = prefs.edit { putInt("device_profile", value ?: -1) }
 
+    /** Normally a phone doesn't alert about its own playback; this turns that on (handy for testing). */
+    var alertOwnDevice: Boolean
+        get() = prefs.getBoolean("alert_own_device", false)
+        set(value) = prefs.edit { putBoolean("alert_own_device", value) }
+
     var reportPlayback: Boolean
         get() = prefs.getBoolean("report_playback", true)
         set(value) = prefs.edit { putBoolean("report_playback", value) }

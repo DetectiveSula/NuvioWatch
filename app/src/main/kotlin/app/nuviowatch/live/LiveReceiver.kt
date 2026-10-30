@@ -24,7 +24,14 @@ object LiveReceiver {
         prefs.liveSince = id
         // Replayed after a reconnect, or from this phone itself: not news.
         val fresh = System.currentTimeMillis() - event.at < FRESH_MS
-        if (change != null && fresh && event.deviceId != prefs.deviceId) alert(context, event, change)
+        val ownDevice = event.deviceId == prefs.deviceId
+        if (change != null && fresh) {
+            if (ownDevice && !prefs.alertOwnDevice) {
+                prefs.setStatus("alert", "Skipped: playback on this device (turn on \"Also alert about this device\")")
+            } else {
+                alert(context, event, change)
+            }
+        }
     }
 
     /** Devices that went silent while playing (e.g. switched off) count as stopped. */
@@ -43,10 +50,20 @@ object LiveReceiver {
         val graph = context.graph
         val prefs = graph.prefs
         val settings = prefs.settings.value
-        if (!settings.enabled) return
+        if (!settings.enabled) {
+            prefs.setStatus("alert", "Skipped: Watching alerts is off")
+            return
+        }
         val titles = graph.titles.titles.value
         val profile = LiveHub.profileFor(event, graph.repository.snapshot.value, titles)
-        if (profile != null && (profile.index in settings.mutedProfiles || prefs.mutedUntil(profile.index) > System.currentTimeMillis())) return
+        if (profile != null && (profile.index in settings.mutedProfiles || prefs.mutedUntil(profile.index) > System.currentTimeMillis())) {
+            prefs.setStatus("alert", "Skipped: ${profile.name} is muted")
+            return
+        }
+        if (!Notifier.canNotify(context)) {
+            prefs.setStatus("alert", "Skipped: notifications are blocked for Nuvio Watch")
+            return
+        }
         val who = profile?.name ?: "Someone on ${event.deviceName}"
         val title = LiveHub.titleFor(event, titles)
         Notifier.showLive(
@@ -57,6 +74,7 @@ object LiveReceiver {
             poster = if (change == LiveChange.STARTED) Notifier.loadBitmap(context, title?.poster) else null,
             silent = change == LiveChange.STOPPED || event.state != PlayState.PLAYING,
         )
+        prefs.setStatus("alert", "Shown: $who ${if (change == LiveChange.STARTED) "started" else "stopped"} watching")
     }
 
     fun reset() {

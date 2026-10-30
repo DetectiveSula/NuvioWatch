@@ -41,6 +41,7 @@ data class DeviceSettings(
     val name: String = "",
     val profileIndex: Int? = null,
     val reportPlayback: Boolean = true,
+    val alertOwnDevice: Boolean = false,
     val hasAccess: Boolean = false,
     val adbCommand: String = "",
 )
@@ -224,6 +225,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         local.update { it.copy(device = deviceSettings()) }
     }
 
+    fun setAlertOwnDevice(on: Boolean) {
+        prefs.alertOwnDevice = on
+        local.update { it.copy(device = deviceSettings()) }
+    }
+
     fun setReportPlayback(on: Boolean) {
         prefs.reportPlayback = on
         local.update { it.copy(device = deviceSettings()) }
@@ -237,6 +243,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return listOf(
             "Live connection" to if (prefs.settings.value.enabled) line("stream", "Not started yet") else "Off (turn on Watching alerts)",
             "Last live report received" to line("received", "None yet"),
+            "Last live alert" to line("alert", "None yet"),
             "Notification access here" to if (access) "Allowed" else "Not allowed",
             "Media reader here" to if (access) line("listener", "Not connected yet") else "Needs notification access",
             "Nuvio player here" to line("player", "Not seen yet"),
@@ -273,6 +280,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             name = prefs.deviceName,
             profileIndex = prefs.deviceProfile,
             reportPlayback = prefs.reportPlayback,
+            alertOwnDevice = prefs.alertOwnDevice,
             hasAccess = NowPlayingListener.hasAccess(app),
             adbCommand = NowPlayingListener.adbCommand(app),
         )
