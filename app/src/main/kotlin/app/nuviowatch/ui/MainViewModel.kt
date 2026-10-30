@@ -3,6 +3,8 @@ package app.nuviowatch.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.nuviowatch.core.LiveEvent
+import app.nuviowatch.core.PlayState
 import app.nuviowatch.core.Profile
 import app.nuviowatch.core.ProgressEntry
 import app.nuviowatch.core.Stats
@@ -12,6 +14,9 @@ import app.nuviowatch.core.Viewing
 import app.nuviowatch.data.MonitorSettings
 import app.nuviowatch.data.Snapshot
 import app.nuviowatch.graph
+import app.nuviowatch.live.LiveHub
+import app.nuviowatch.live.LiveReceiver
+import app.nuviowatch.live.NowPlayingListener
 import app.nuviowatch.monitor.Monitor
 import app.nuviowatch.monitor.MonitorService
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +33,17 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 enum class ServerStatus { DETECTING, READY, NOT_FOUND }
+
+/** A device where Nuvio is playing or paused right now. */
+data class LiveNow(val event: LiveEvent, val profile: Profile?, val info: TitleInfo?)
+
+data class DeviceSettings(
+    val name: String = "",
+    val profileIndex: Int? = null,
+    val reportPlayback: Boolean = true,
+    val hasAccess: Boolean = false,
+    val adbCommand: String = "",
+)
 
 enum class StatsRange(val label: String, val heading: String, val days: Int?) {
     MONTH("30 days", "Watched in 30 days", 30),
@@ -58,6 +74,9 @@ data class UiState(
     val lastPollAt: Long = 0,
     val lastPollError: String? = null,
     val clock: Long = System.currentTimeMillis(),
+    /** Devices currently playing or paused in Nuvio, newest first. */
+    val liveNow: List<LiveNow> = emptyList(),
+    val device: DeviceSettings = DeviceSettings(),
 ) {
     fun stats(profileIndex: Int?, range: StatsRange = StatsRange.MONTH): Stats = StatsCalculator.compute(
         viewings.filter { profileIndex == null || it.profileIndex == profileIndex },
@@ -72,6 +91,8 @@ data class UiState(
 }
 
 private data class Local(
+    val liveDevices: Map<String, LiveEvent> = emptyMap(),
+    val device: DeviceSettings = DeviceSettings(),
     val server: ServerStatus = ServerStatus.DETECTING,
     val loading: Boolean = false,
     val error: String? = null,
@@ -112,6 +133,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             lastPollAt = local.lastPollAt,
             lastPollError = local.lastPollError,
             clock = local.clock,
+            liveNow = local.liveDevices.values
+                .filter { it.state != PlayState.STOPPED && local.clock - it.at < LIVE_FRESH_MS }
+                .sortedByDescending { it.at }
+                .map { LiveNow(it, LiveHub.profileFor(it, snapshot, titles), LiveHub.titleFor(it, titles)) },
+            device = local.device,
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
@@ -123,13 +149,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             while (true) {
                 local.update {
                     it.copy(
+                        liveDevices = prefs.liveDevices,
+                        device = deviceSettings(),
                         live = prefs.liveEntries,
                         lastPollAt = prefs.lastPollAt,
                         lastPollError = prefs.lastPollError,
                         clock = System.currentTimeMillis(),
                     )
                 }
-                delay(15_000)
+                delay(5_000)
             }
         }
     }
@@ -178,6 +206,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         it.copy(mutedProfiles = if (on) it.mutedProfiles - profileIndex else it.mutedProfiles + profileIndex)
     }
 
+    fun setDeviceName(name: String) {
+        prefs.deviceName = name
+        local.update { it.copy(device = deviceSettings()) }
+    }
+
+    fun setDeviceProfile(index: Int?) {
+        prefs.deviceProfile = index
+        local.update { it.copy(device = deviceSettings()) }
+    }
+
+    fun setReportPlayback(on: Boolean) {
+        prefs.reportPlayback = on
+        local.update { it.copy(device = deviceSettings()) }
+    }
+
+    private fun deviceSettings(): DeviceSettings {
+        val app = getApplication<Application>()
+        return DeviceSettings(
+            name = prefs.deviceName,
+            profileIndex = prefs.deviceProfile,
+            reportPlayback = prefs.reportPlayback,
+            hasAccess = NowPlayingListener.hasAccess(app),
+            adbCommand = NowPlayingListener.adbCommand(app),
+        )
+    }
+
     fun checkNow() = viewModelScope.launch {
         Monitor.poll(getApplication<Application>(), force = true)
         local.update { it.copy(live = prefs.liveEntries, lastPollAt = prefs.lastPollAt, lastPollError = prefs.lastPollError) }
@@ -187,6 +241,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         MonitorService.stop(getApplication<Application>())
         Monitor.reset()
         graph.signOut()
+        LiveReceiver.reset()
         local.update { Local(server = it.server) }
     }
 
@@ -198,3 +253,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return ProfileNow(p, latest, today)
     }
 }
+
+/** A live report older than this is ignored (the device probably went off). */
+private const val LIVE_FRESH_MS = 5 * 60_000L

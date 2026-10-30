@@ -6,6 +6,7 @@ import app.nuviowatch.core.NuvioClient
 import app.nuviowatch.core.ProgressEntry
 import app.nuviowatch.core.ServerConfig
 import app.nuviowatch.core.Session
+import app.nuviowatch.core.LiveEvent
 import app.nuviowatch.core.SessionStore
 import app.nuviowatch.core.WatchSession
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -83,6 +84,42 @@ class Prefs(context: Context) : SessionStore {
 
     fun setKnownPositions(profileId: Int, positions: Map<String, Long>) =
         prefs.edit { putString("positions_$profileId", json.encodeToString(positions)) }
+
+    /** Stable id for this device in live reports. */
+    val deviceId: String
+        get() = prefs.getString("device_id", null) ?: java.util.UUID.randomUUID().toString().also { id ->
+            prefs.edit { putString("device_id", id) }
+        }
+
+    /** Name shown for this device, e.g. "Living room TV". */
+    var deviceName: String
+        get() = prefs.getString("device_name", null) ?: android.os.Build.MODEL
+        set(value) = prefs.edit { putString("device_name", value.trim()) }
+
+    /** Profile that watches on this device, or null to work it out from the title. */
+    var deviceProfile: Int?
+        get() = prefs.getInt("device_profile", -1).takeIf { it >= 0 }
+        set(value) = prefs.edit { putInt("device_profile", value ?: -1) }
+
+    var reportPlayback: Boolean
+        get() = prefs.getBoolean("report_playback", true)
+        set(value) = prefs.edit { putBoolean("report_playback", value) }
+
+    /** Latest live state of every device on the account. */
+    var liveDevices: Map<String, LiveEvent>
+        get() = prefs.getString("live_devices", null)
+            ?.let { runCatching { json.decodeFromString<Map<String, LiveEvent>>(it) }.getOrNull() }
+            .orEmpty()
+        set(value) = prefs.edit { putString("live_devices", json.encodeToString(value)) }
+
+    /** Last relay message read, so a reconnect picks up where it left off. */
+    var liveSince: String?
+        get() = prefs.getString("live_since", null)
+        set(value) = prefs.edit { putString("live_since", value) }
+
+    /** Newest progress time seen per profile, for when Nuvio's change feed isn't available. */
+    fun lastSeenProgress(profileId: Int): Long = prefs.getLong("last_seen_$profileId", 0)
+    fun setLastSeenProgress(profileId: Int, at: Long) = prefs.edit { putLong("last_seen_$profileId", at) }
 
     /** Alerts about a profile are paused until this time (set by "Mute today"). */
     fun mutedUntil(profileId: Int): Long = prefs.getLong("muted_until_$profileId", 0)

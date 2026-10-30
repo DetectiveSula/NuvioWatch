@@ -73,6 +73,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nuviowatch.core.AlertPolicy
 import app.nuviowatch.core.LiveState
+import app.nuviowatch.core.LiveTracker
+import app.nuviowatch.core.PlayState
 import app.nuviowatch.core.Profile
 import app.nuviowatch.core.Viewing
 import app.nuviowatch.core.episodeLabel
@@ -142,12 +144,16 @@ fun NowScreen(state: UiState, onOpenSettings: () -> Unit) {
     val hero = state.now.filter { it.latest != null }.maxWithOrNull(
         compareBy<ProfileNow>({ AlertPolicy.liveState(it.latest, state.clock) == LiveState.ACTIVE_NOW }, { it.latest!!.lastWatchedMs }),
     )
-    val heroInfo = hero?.latest?.let { state.titles[it.contentId] }
+    val live = state.liveNow.firstOrNull()
+    val heroInfo = live?.info ?: hero?.latest?.let { state.titles[it.contentId] }
     val tint = rememberImageTint(heroInfo?.poster)
-    val others = state.now.filter { it != hero }
+    val others = state.now.filter { if (live != null) it.profile.index != live.profile?.index else it != hero }
 
     LazyColumn(Modifier.fillMaxSize().glow(tint)) {
-        item(key = "hero") { Hero(state, hero, tint) }
+        item(key = "hero") { if (live != null) LiveHero(state, live, tint) else Hero(state, hero, tint) }
+        state.liveNow.drop(1).forEach { other ->
+            item(key = "live-${other.event.deviceId}") { LiveRow(other, state.clock) }
+        }
 
         if (!state.settings.enabled) {
             item(key = "alerts-off") {
@@ -266,6 +272,96 @@ private fun Hero(state: UiState, hero: ProfileNow?, tint: Color) {
                     Text(formatClock(entry.duration), style = MaterialTheme.typography.labelSmall, color = Color(0xFFD6D1E6))
                 }
             }
+        }
+    }
+}
+
+/** The hero when a device is reporting Nuvio playback right now. */
+@Composable
+private fun LiveHero(state: UiState, live: LiveNow, tint: Color) {
+    val event = live.event
+    val playing = event.state == PlayState.PLAYING
+    val position = LiveTracker.estimatedPosition(event, state.clock)
+    val who = live.profile?.name ?: "Someone"
+    Box(Modifier.fillMaxWidth().height(480.dp).background(tint.copy(alpha = 0.6f))) {
+        (live.info?.background ?: live.info?.poster)?.let {
+            AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
+        }
+        Box(
+            Modifier.matchParentSize().background(
+                Brush.verticalGradient(0f to Ink.copy(alpha = 0.6f), 0.22f to Color.Transparent, 0.45f to Color.Transparent, 1f to Ink),
+            ),
+        )
+        Row(
+            Modifier.statusBarsPadding().fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Nuvio Watch", style = display(19), modifier = Modifier.weight(1f))
+            state.now.forEachIndexed { i, p ->
+                Box(Modifier.offset(x = (-8 * i).dp)) {
+                    ProfileAvatar(p.profile, size = 28.dp, ring = if (p.profile.index == live.profile?.index) LiveRed else Ink)
+                }
+            }
+        }
+        Column(
+            Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (playing) {
+                    LiveDot()
+                    Spacer(Modifier.width(4.dp))
+                }
+                Text(
+                    "${who.uppercase()} ${if (playing) "IS WATCHING" else "PAUSED"} · ${event.deviceName.uppercase()}",
+                    style = Eyebrow,
+                    color = if (playing) Color(0xFFFFB3C1) else TextMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(live.info?.name ?: event.title, style = display(44), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            event.subtitle?.takeIf { it.isNotBlank() }?.let { Text(it, color = Color(0xFFD6D1E6), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            if (event.durationMs > 0) {
+                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(formatClock(position), style = MaterialTheme.typography.labelSmall, color = Color(0xFFD6D1E6))
+                    Box(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                        ThinProgress(position.toFloat() / event.durationMs, if (playing) Color.White else TextMuted)
+                    }
+                    Text(formatClock(event.durationMs), style = MaterialTheme.typography.labelSmall, color = Color(0xFFD6D1E6))
+                }
+            }
+        }
+    }
+}
+
+/** Extra devices playing at the same time. */
+@Composable
+private fun LiveRow(live: LiveNow, now: Long) {
+    val playing = live.event.state == PlayState.PLAYING
+    GlassCard(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), padding = 12.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Poster(live.info?.poster, width = 36.dp, corner = 8.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "${live.profile?.name ?: "Someone"} ${if (playing) "is watching" else "paused"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (playing) Color(0xFFFFB3C1) else TextMuted,
+                )
+                Text(live.info?.name ?: live.event.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    listOfNotNull(live.event.subtitle, live.event.deviceName).joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted,
+                    maxLines = 1,
+                )
+            }
+            if (playing) LiveDot(6.dp)
+        }
+        if (live.event.durationMs > 0) {
+            Spacer(Modifier.height(10.dp))
+            ThinProgress(LiveTracker.estimatedPosition(live.event, now).toFloat() / live.event.durationMs, Accent, height = 3.dp, track = Color(0x1AFFFFFF))
         }
     }
 }
@@ -639,6 +735,8 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
                 }
             }
 
+            DeviceCard(state, vm)
+
             GlassCard {
                 SectionTitle("Account")
                 Text(state.email.ifBlank { "Signed in" })
@@ -649,6 +747,98 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
         }
         Spacer(Modifier.navigationBarsPadding().height(BottomSpace))
     }
+}
+
+/** Settings for reporting what Nuvio is playing on this device. */
+@Composable
+private fun DeviceCard(state: UiState, vm: MainViewModel) {
+    val context = LocalContext.current
+    val device = state.device
+    var name by rememberSaveable(device.name) { mutableStateOf(device.name) }
+    GlassCard {
+        SectionTitle("This device")
+        SettingSwitch(
+            title = "Report what's playing here",
+            subtitle = "When Nuvio plays on this phone or TV, everyone's Nuvio Watch sees it instantly.",
+            checked = device.reportPlayback,
+        ) { vm.setReportPlayback(it) }
+
+        if (device.reportPlayback) {
+            Spacer(Modifier.height(12.dp))
+            if (device.hasAccess) {
+                Text("Playback reporting is on ✓", color = Color(0xFF7CE0C3), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            } else {
+                Text(
+                    "Needs \"notification access\" so it can see Nuvio's play and pause state. It doesn't read your notifications.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted,
+                )
+                Spacer(Modifier.height(8.dp))
+                var failed by remember { mutableStateOf(false) }
+                Button(
+                    onClick = {
+                        failed = runCatching {
+                            context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }.isFailure
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Ink),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Allow notification access") }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    (if (failed) "This device has no settings screen for it. " else "") +
+                        "On a Fire Stick or some Android TVs, turn it on from a computer with:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted,
+                )
+                Text(device.adbCommand, style = MaterialTheme.typography.labelSmall, color = Color(0xFFC3CAFF))
+            }
+
+            Spacer(Modifier.height(14.dp))
+            androidx.compose.material3.OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Device name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (name.trim() != device.name && name.isNotBlank()) {
+                OutlinedButton(onClick = { vm.setDeviceName(name) }, modifier = Modifier.padding(top = 6.dp)) { Text("Save name") }
+            }
+
+            Spacer(Modifier.height(14.dp))
+            Text("Who watches on this device?", fontWeight = FontWeight.Medium)
+            Text(
+                "\"Work it out\" matches the title to whoever has it in their Nuvio history.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextMuted,
+            )
+            Spacer(Modifier.height(8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ChoicePill("Work it out", device.profileIndex == null) { vm.setDeviceProfile(null) }
+                state.snapshot.profiles.forEach { p ->
+                    ChoicePill(p.name, device.profileIndex == p.index) { vm.setDeviceProfile(p.index) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChoicePill(label: String, active: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Text(
+        label,
+        modifier = Modifier
+            .clip(shape)
+            .background(if (active) Color.White else Color.Transparent)
+            .border(1.dp, if (active) Color.White else Color(0x33FFFFFF), shape)
+            .clickable(role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        color = if (active) Ink else TextPrimary,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 13.sp,
+    )
 }
 
 @Composable

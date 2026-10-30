@@ -11,15 +11,21 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Runs on TVs and Fire Sticks too, where there's no touchscreen. -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
     <!-- Lets the app read the official Nuvio app's public server key if it is installed. -->
     <queries>
         <package android:name="com.nuvio.app" />
+        <package android:name="com.nuvio.tv" />
     </queries>
 
     <application
         android:name=".NuvioWatchApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
+        android:banner="@drawable/tv_banner"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.NuvioWatch">
@@ -32,6 +38,7 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
 
@@ -42,6 +49,17 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Checks the user's own Nuvio account every minute and notifies them when a profile starts watching." />
+        </service>
+
+        <!-- Reads Nuvio's play / pause / stop state (needs "notification access"). -->
+        <service
+            android:name=".live.NowPlayingListener"
+            android:exported="true"
+            android:label="Nuvio Watch – playback reporting"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
         </service>
 
         <receiver

@@ -13,12 +13,17 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import app.nuviowatch.R
+import app.nuviowatch.core.LiveEvent
 import app.nuviowatch.core.Profile
 import app.nuviowatch.core.SummaryLine
 import app.nuviowatch.core.WatchSession
 import app.nuviowatch.graph
 import app.nuviowatch.ui.MainActivity
+import coil.imageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
 import java.text.DateFormat
 import java.util.Date
 
@@ -74,6 +79,40 @@ object Notifier {
         }
         @Suppress("MissingPermission")
         NotificationManagerCompat.from(context).notify(session.notificationId, builder.build())
+    }
+
+    /** "Ishti started watching" from another device, updated in place when they stop. */
+    fun showLive(context: Context, event: LiveEvent, heading: String, profileIndex: Int?, poster: Bitmap?, silent: Boolean) {
+        if (!canNotify(context)) return
+        val id = "live|${event.deviceId}".hashCode()
+        val text = listOfNotNull(event.title, event.subtitle?.takeIf { it.isNotBlank() }, "on ${event.deviceName}").joinToString(" · ")
+        val builder = NotificationCompat.Builder(context, ALERTS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(heading)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setColor(0xFFFF5C7A.toInt())
+            .setContentIntent(openApp(context))
+            .setAutoCancel(true)
+            .setSilent(silent)
+            .setWhen(event.at)
+            .setShowWhen(true)
+        if (poster != null) builder.setLargeIcon(poster)
+        if (profileIndex != null) {
+            builder.addAction(0, "Mute today", MuteReceiver.intent(context, profileIndex, id))
+        }
+        @Suppress("MissingPermission")
+        NotificationManagerCompat.from(context).notify(id, builder.build())
+    }
+
+    suspend fun loadBitmap(context: Context, url: String?): Bitmap? {
+        if (url == null) return null
+        val result = runCatching {
+            context.imageLoader.execute(ImageRequest.Builder(context).data(url).allowHardware(false).size(256).build())
+        }.getOrNull()
+        return (result as? SuccessResult)?.drawable?.toBitmap()
     }
 
     fun ongoing(context: Context): Notification {

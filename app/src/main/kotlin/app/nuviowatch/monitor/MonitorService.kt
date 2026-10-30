@@ -13,11 +13,15 @@ import android.os.PowerManager
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import app.nuviowatch.graph
+import app.nuviowatch.live.LiveHub
+import app.nuviowatch.live.LiveReceiver
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -31,6 +35,7 @@ import kotlinx.coroutines.launch
 class MonitorService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var loop: Job? = null
+    private var live: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -41,6 +46,7 @@ class MonitorService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (live?.isActive != true) live = scope.launch { listenForLiveReports() }
         if (loop?.isActive != true) {
             loop = scope.launch {
                 while (isActive) {
@@ -52,6 +58,27 @@ class MonitorService : Service() {
             scope.launch { check() }
         }
         return START_STICKY
+    }
+
+    /** Keeps a streaming connection to the account's live channel, reconnecting as needed. */
+    private suspend fun listenForLiveReports() {
+        var backoff = 5_000L
+        while (currentCoroutineContext().isActive) {
+            val relay = LiveHub.relay(this)
+            if (relay == null) {
+                delay(30_000)
+                continue
+            }
+            try {
+                relay.listen(graph.prefs.liveSince ?: "15m") { id, event -> LiveReceiver.onEvent(this, id, event) }
+                backoff = 5_000L
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                delay(backoff)
+                backoff = (backoff * 2).coerceAtMost(120_000L)
+            }
+        }
     }
 
     private suspend fun check() {

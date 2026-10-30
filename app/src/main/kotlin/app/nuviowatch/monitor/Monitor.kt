@@ -1,14 +1,14 @@
 package app.nuviowatch.monitor
 
 import android.content.Context
-import android.graphics.Bitmap
-import androidx.core.graphics.drawable.toBitmap
+import app.nuviowatch.core.NuvioClient
+import app.nuviowatch.core.NuvioException
 import app.nuviowatch.core.Profile
+import app.nuviowatch.core.ProgressEvent
 import app.nuviowatch.core.SessionTracker
+import app.nuviowatch.core.normalizeEpochMs
 import app.nuviowatch.graph
-import coil.imageLoader
-import coil.request.ImageRequest
-import coil.request.SuccessResult
+import app.nuviowatch.live.LiveReceiver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -44,15 +44,29 @@ object Monitor {
                 val cursor = prefs.cursor(profile.index)
                 if (cursor == null) {
                     // First check for this profile: start from now instead of reporting old history.
-                    prefs.setCursor(profile.index, client.progressCursor(profile.index))
+                    val start = try {
+                        client.progressCursor(profile.index)
+                    } catch (e: NuvioException) {
+                        if (e.isAuthError) throw e
+                        changesFromFullPull(context, client, profile.index) // records where things are
+                        0L
+                    }
+                    prefs.setCursor(profile.index, start)
                     continue
                 }
-                val events = client.progressChanges(profile.index, cursor)
+                val events = try {
+                    client.progressChanges(profile.index, cursor).also { if (it.isNotEmpty()) prefs.setCursor(profile.index, it.maxOf { e -> e.eventId }) }
+                } catch (e: NuvioException) {
+                    if (e.isAuthError) throw e
+                    changesFromFullPull(context, client, profile.index)
+                }
+                events.filter { it.isUpsert }.maxOfOrNull { normalizeEpochMs(it.lastWatched) }?.let {
+                    if (it > prefs.lastSeenProgress(profile.index)) prefs.setLastSeenProgress(profile.index, it)
+                }
                 if (events.isEmpty()) continue
-                prefs.setCursor(profile.index, events.maxOf { it.eventId })
 
                 val upserts = events.filter { it.isUpsert }
-                upserts.maxByOrNull { it.eventId }?.toEntry()?.let { latest ->
+                upserts.maxByOrNull { normalizeEpochMs(it.lastWatched) }?.toEntry()?.let { latest ->
                     if (latest.lastWatchedMs >= (live[profile.index]?.lastWatchedMs ?: 0)) live[profile.index] = latest
                 }
 
@@ -63,6 +77,7 @@ object Monitor {
                 prefs.setKnownPositions(profile.index, known)
             }
 
+            LiveReceiver.expire(context, now)
             val settings = prefs.settings.value
             for ((index, session) in sessions.toMap()) {
                 if (tracker.isDue(session, now)) {
@@ -72,7 +87,7 @@ object Monitor {
                         session.items.distinctBy { it.contentId }.forEach { graph.titles.ensure(it.contentId, it.series) }
                         val lines = SessionTracker.summarize(profile!!.name, session) { graph.titles[it]?.name }
                         val poster = lines.firstOrNull()?.let { graph.titles[it.contentId]?.poster }
-                        Notifier.showSummary(context, profile, session, lines, loadBitmap(context, poster))
+                        Notifier.showSummary(context, profile, session, lines, Notifier.loadBitmap(context, poster))
                     }
                     sessions[index] = session.copy(notifiedAt = now)
                 }
@@ -91,6 +106,23 @@ object Monitor {
         }
     }
 
+    /**
+     * If Nuvio's change feed isn't available, read the whole progress list and
+     * treat anything newer than the last check as a change.
+     */
+    private suspend fun changesFromFullPull(context: Context, client: NuvioClient, profileIndex: Int): List<ProgressEvent> {
+        val since = context.graph.prefs.lastSeenProgress(profileIndex)
+        val entries = client.progress(profileIndex)
+        if (since == 0L) {
+            // First time: just note where things are.
+            entries.maxOfOrNull { it.lastWatchedMs }?.let { context.graph.prefs.setLastSeenProgress(profileIndex, it) }
+            return emptyList()
+        }
+        return entries.filter { it.lastWatchedMs > since }.map {
+            ProgressEvent(0, "upsert", it.progressKey, it.contentId, it.contentType, it.videoId, it.season, it.episode, it.position, it.duration, it.lastWatched)
+        }
+    }
+
     /** Saved positions, seeded from the last full refresh the first time. */
     private fun knownPositions(context: Context, profileIndex: Int): MutableMap<String, Long> {
         val saved = context.graph.prefs.knownPositions(profileIndex)
@@ -98,12 +130,6 @@ object Monitor {
         return context.graph.repository.snapshot.value.progress[profileIndex].orEmpty()
             .associate { it.progressKey.ifBlank { it.videoId.ifBlank { it.contentId } } to it.position }
             .toMutableMap()
-    }
-
-    private suspend fun loadBitmap(context: Context, url: String?): Bitmap? {
-        if (url == null) return null
-        val result = context.imageLoader.execute(ImageRequest.Builder(context).data(url).allowHardware(false).size(256).build())
-        return (result as? SuccessResult)?.drawable?.toBitmap()
     }
 
     /** Clears in-memory state after signing out. */
