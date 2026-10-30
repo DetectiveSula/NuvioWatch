@@ -59,7 +59,7 @@ jobs:
       - name: Report build errors
         if: failure()
         run: |
-          grep -E '^e: |error:|What went wrong' -A2 build.log | head -40 | while IFS= read -r line; do echo "::error::$line"; done
+          grep -E '^e: |error:|What went wrong|Caused by|[Kk]eystore|password|alias|Tag number' -A2 build.log | grep -v '^\s*at ' | head -60 | while IFS= read -r line; do echo "::error::$line"; done
 
       - name: Rename APK
         run: cp app/build/outputs/apk/release/*.apk NuvioWatch.apk
