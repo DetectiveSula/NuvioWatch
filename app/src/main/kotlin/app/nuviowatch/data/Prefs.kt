@@ -7,6 +7,7 @@ import app.nuviowatch.core.ProgressEntry
 import app.nuviowatch.core.ServerConfig
 import app.nuviowatch.core.Session
 import app.nuviowatch.core.SessionStore
+import app.nuviowatch.core.WatchSession
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -66,6 +67,22 @@ class Prefs(context: Context) : SessionStore {
     /** Position in each profile's change feed, so only new changes are checked. */
     fun cursor(profileId: Int): Long? = prefs.getLong("cursor_$profileId", -1).takeIf { it >= 0 }
     fun setCursor(profileId: Int, value: Long) = prefs.edit { putLong("cursor_$profileId", value) }
+
+    /** Each profile's current viewing session, waiting to be summarised. */
+    var sessions: Map<Int, WatchSession>
+        get() = prefs.getString("sessions", null)
+            ?.let { runCatching { json.decodeFromString<Map<Int, WatchSession>>(it) }.getOrNull() }
+            .orEmpty()
+        set(value) = prefs.edit { putString("sessions", json.encodeToString(value)) }
+
+    /** Last known position of each film or episode, so a session counts only new viewing. */
+    fun knownPositions(profileId: Int): Map<String, Long> =
+        prefs.getString("positions_$profileId", null)
+            ?.let { runCatching { json.decodeFromString<Map<String, Long>>(it) }.getOrNull() }
+            .orEmpty()
+
+    fun setKnownPositions(profileId: Int, positions: Map<String, Long>) =
+        prefs.edit { putString("positions_$profileId", json.encodeToString(positions)) }
 
     /** Alerts about a profile are paused until this time (set by "Mute today"). */
     fun mutedUntil(profileId: Int): Long = prefs.getLong("muted_until_$profileId", 0)

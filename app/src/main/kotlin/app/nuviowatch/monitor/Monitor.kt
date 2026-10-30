@@ -3,9 +3,8 @@ package app.nuviowatch.monitor
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.core.graphics.drawable.toBitmap
-import app.nuviowatch.core.AlertPolicy
 import app.nuviowatch.core.Profile
-import app.nuviowatch.core.isSeries
+import app.nuviowatch.core.SessionTracker
 import app.nuviowatch.graph
 import coil.imageLoader
 import coil.request.ImageRequest
@@ -15,11 +14,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * One check of the account: reads each profile's new progress changes and
- * sends a notification for anyone who has started watching something.
+ * One check of the account: reads each profile's new progress changes, groups them
+ * into viewing sessions, and sends a summary once a session has gone quiet.
  */
 object Monitor {
     private val mutex = Mutex()
+    private val tracker = SessionTracker()
     private var profiles: List<Profile> = emptyList()
     private var profilesFetchedAt = 0L
 
@@ -37,14 +37,13 @@ object Monitor {
                 profiles = client.profiles()
                 profilesFetchedAt = now
             }
-            val settings = prefs.settings.value
-            val policy = AlertPolicy(notifyFinished = settings.notifyFinished)
             val live = prefs.liveEntries.toMutableMap()
+            val sessions = prefs.sessions.toMutableMap()
 
             for (profile in profiles) {
                 val cursor = prefs.cursor(profile.index)
                 if (cursor == null) {
-                    // First check for this profile: start from now instead of alerting on old history.
+                    // First check for this profile: start from now instead of reporting old history.
                     prefs.setCursor(profile.index, client.progressCursor(profile.index))
                     continue
                 }
@@ -52,20 +51,36 @@ object Monitor {
                 if (events.isEmpty()) continue
                 prefs.setCursor(profile.index, events.maxOf { it.eventId })
 
-                events.filter { it.isUpsert }.maxByOrNull { it.eventId }?.toEntry()?.let { latest ->
+                val upserts = events.filter { it.isUpsert }
+                upserts.maxByOrNull { it.eventId }?.toEntry()?.let { latest ->
                     if (latest.lastWatchedMs >= (live[profile.index]?.lastWatchedMs ?: 0)) live[profile.index] = latest
                 }
 
-                if (profile.index in settings.mutedProfiles || prefs.mutedUntil(profile.index) > now) continue
-                for (alert in policy.evaluate(profile, events, now, prefs::lastAlertAt)) {
-                    val entry = alert.entry
-                    graph.titles.ensure(entry.contentId, isSeries(entry.contentType, entry.season, entry.videoId))
-                    val title = graph.titles[entry.contentId]
-                    Notifier.showAlert(context, alert, title, loadBitmap(context, title?.poster))
-                    prefs.setLastAlertAt(alert.cooldownKey, now)
-                }
+                val known = knownPositions(context, profile.index)
+                tracker.record(sessions[profile.index], profile.index, events, now) { key -> known[key] }
+                    ?.let { sessions[profile.index] = it }
+                upserts.forEach { known[it.progressKey.ifBlank { it.videoId.ifBlank { it.contentId } }] = it.position }
+                prefs.setKnownPositions(profile.index, known)
             }
+
+            val settings = prefs.settings.value
+            for ((index, session) in sessions.toMap()) {
+                if (tracker.isDue(session, now)) {
+                    val profile = profiles.firstOrNull { it.index == index }
+                    val allowed = profile != null && index !in settings.mutedProfiles && prefs.mutedUntil(index) <= now
+                    if (allowed) {
+                        session.items.distinctBy { it.contentId }.forEach { graph.titles.ensure(it.contentId, it.series) }
+                        val lines = SessionTracker.summarize(profile!!.name, session) { graph.titles[it]?.name }
+                        val poster = lines.firstOrNull()?.let { graph.titles[it.contentId]?.poster }
+                        Notifier.showSummary(context, profile, session, lines, loadBitmap(context, poster))
+                    }
+                    sessions[index] = session.copy(notifiedAt = now)
+                }
+                if (tracker.isExpired(session, now)) sessions.remove(index)
+            }
+
             prefs.liveEntries = live
+            prefs.sessions = sessions
             prefs.lastPollError = null
         } catch (e: CancellationException) {
             throw e
@@ -74,6 +89,15 @@ object Monitor {
         } finally {
             prefs.lastPollAt = now
         }
+    }
+
+    /** Saved positions, seeded from the last full refresh the first time. */
+    private fun knownPositions(context: Context, profileIndex: Int): MutableMap<String, Long> {
+        val saved = context.graph.prefs.knownPositions(profileIndex)
+        if (saved.isNotEmpty()) return saved.toMutableMap()
+        return context.graph.repository.snapshot.value.progress[profileIndex].orEmpty()
+            .associate { it.progressKey.ifBlank { it.videoId.ifBlank { it.contentId } } to it.position }
+            .toMutableMap()
     }
 
     private suspend fun loadBitmap(context: Context, url: String?): Bitmap? {

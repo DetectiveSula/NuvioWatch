@@ -154,7 +154,7 @@ fun NowScreen(state: UiState, onOpenSettings: () -> Unit) {
                 GlassCard(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable(onClick = onOpenSettings)) {
                     Text("Alerts are off", fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Turn them on in Settings to get a notification when someone starts watching.",
+                        "Turn them on in Settings to get a summary each time someone watches something.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextMuted,
                     )
@@ -543,7 +543,7 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
             GlassCard {
                 SettingSwitch(
                     title = "Watching alerts",
-                    subtitle = "Checks Nuvio in the background and notifies you when someone starts watching.",
+                    subtitle = "Sends one summary after someone finishes watching, about 20 minutes after they stop.",
                     checked = state.settings.enabled,
                 ) { on ->
                     if (on && Build.VERSION.SDK_INT >= 33 && !Notifier.canNotify(context)) {
@@ -591,8 +591,6 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
                         }
                     }
                 }
-                Spacer(Modifier.height(14.dp))
-                SettingSwitch("Also alert when they finish", null, state.settings.notifyFinished) { vm.setNotifyFinished(it) }
             }
 
             if (state.snapshot.profiles.isNotEmpty()) {

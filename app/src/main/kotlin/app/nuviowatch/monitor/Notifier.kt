@@ -14,10 +14,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import app.nuviowatch.R
-import app.nuviowatch.core.AlertKind
-import app.nuviowatch.core.TitleInfo
-import app.nuviowatch.core.WatchAlert
-import app.nuviowatch.core.episodeLabel
+import app.nuviowatch.core.Profile
+import app.nuviowatch.core.SummaryLine
+import app.nuviowatch.core.WatchSession
 import app.nuviowatch.graph
 import app.nuviowatch.ui.MainActivity
 import java.text.DateFormat
@@ -47,33 +46,34 @@ object Notifier {
         Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    fun showAlert(context: Context, alert: WatchAlert, title: TitleInfo?, poster: Bitmap?) {
-        if (!canNotify(context)) return
-        val entry = alert.entry
-        val name = title?.name ?: entry.contentId
-        val episode = episodeLabel(entry.season, entry.episode)
-        val heading = when (alert.kind) {
-            // Progress also arrives when someone stops, so don't claim they're still watching.
-            AlertKind.WATCHING -> "${alert.profile.name} is on Nuvio"
-            AlertKind.FINISHED -> "${alert.profile.name} finished"
-        }
-        val id = alert.cooldownKey.hashCode()
+    /**
+     * One notification per viewing session. Later activity in the same session
+     * replaces it silently, so a long sitting ends up as a single, correct summary.
+     */
+    fun showSummary(context: Context, profile: Profile, session: WatchSession, lines: List<SummaryLine>, poster: Bitmap?) {
+        if (!canNotify(context) || lines.isEmpty()) return
+        val main = lines.first()
         val builder = NotificationCompat.Builder(context, ALERTS)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(heading)
-            .setContentText(listOfNotNull(name, episode).joinToString(" · "))
+            .setContentTitle(main.title)
+            .setContentText(main.text)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setColor(0xFFFF5C7A.toInt())
             .setContentIntent(openApp(context))
             .setAutoCancel(true)
-            .addAction(0, "Mute ${alert.profile.name} today", MuteReceiver.intent(context, alert.profile.index, id))
+            .setSilent(session.isUpdate)
+            .setWhen(session.lastActivityAt)
+            .setShowWhen(true)
+            .addAction(0, "Mute ${profile.name} today", MuteReceiver.intent(context, profile.index, session.notificationId))
         if (poster != null) builder.setLargeIcon(poster)
-        if (alert.kind == AlertKind.WATCHING && entry.duration > 0) {
-            builder.setProgress(100, (entry.fraction * 100).toInt(), false)
+        if (lines.size > 1) {
+            val inbox = NotificationCompat.InboxStyle().setBigContentTitle("${profile.name} watched ${lines.size} titles")
+            lines.forEach { inbox.addLine("${it.title.removePrefix(profile.name + " ")} · ${it.text}") }
+            builder.setStyle(inbox)
         }
         @Suppress("MissingPermission")
-        NotificationManagerCompat.from(context).notify(id, builder.build())
+        NotificationManagerCompat.from(context).notify(session.notificationId, builder.build())
     }
 
     fun ongoing(context: Context): Notification {
