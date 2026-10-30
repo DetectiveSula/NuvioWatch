@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
@@ -41,8 +42,11 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private const val SETTINGS_TAB = 4
+
 private val tabs = listOf(
     NavItem("Now", Icons.Filled.PlayArrow),
+    NavItem("Family", Icons.Filled.Favorite),
     NavItem("Stats", Icons.Filled.Star),
     NavItem("History", Icons.Filled.DateRange),
     NavItem("Settings", Icons.Filled.Settings),
@@ -57,13 +61,14 @@ private fun MainScreen(state: UiState, vm: MainViewModel) {
             CircularProgressIndicator(Modifier.align(Alignment.Center))
         } else {
             Crossfade(targetState = tab, label = "tab") { current ->
-                if (current == 3) {
+                if (current == SETTINGS_TAB) {
                     SettingsScreen(state, vm)
                 } else {
                     PullToRefreshBox(isRefreshing = state.loading, onRefresh = { vm.refresh() }, modifier = Modifier.fillMaxSize()) {
                         when (current) {
-                            0 -> NowScreen(state, onOpenSettings = { tab = 3 })
-                            1 -> StatsScreen(state)
+                            0 -> NowScreen(state, onOpenSettings = { tab = SETTINGS_TAB })
+                            1 -> FamilyScreen(state)
+                            2 -> StatsScreen(state)
                             else -> HistoryScreen(state)
                         }
                     }
