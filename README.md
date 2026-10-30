@@ -23,12 +23,14 @@ If someone presses play and watches without pausing or skipping, the alert comes
 
 1. Create a new **private** repository on GitHub and upload this folder to it. You can drag and drop the files on GitHub's "Add file → Upload files" page, or use git.
 2. Open the repository's **Actions** tab. The **Build APK** workflow runs on every push to `main`; you can also start it from there.
-3. When the run finishes, download **NuvioWatch-apk** from the run's Artifacts section and unzip it.
-4. Copy the `.apk` to your phone, open it, and allow "install unknown apps" when asked.
+3. When the run finishes, download the APK. Once the signing key below is set up, each build is also published as a Release, and the newest one is always at
+   `https://github.com/DetectiveSula/NuvioWatch/releases/latest/download/NuvioWatch.apk`
+   (for anyone who can see the repository). Before that, download **NuvioWatch-apk** from the run's Artifacts section and unzip it.
+4. Open the `.apk` on the phone and allow "install unknown apps" when asked.
 
 During the build, the workflow downloads the latest official Nuvio APK from Nuvio's GitHub releases and reads Nuvio's **public** server key from it. This is the key every copy of the Nuvio app contains. It is never stored in this repository.
 
-### Updating without uninstalling (optional)
+### Signing key (needed for Releases and for updates without uninstalling)
 
 Each GitHub build is signed with a new temporary key, so to install a newer build you must uninstall the old one first. To avoid that, create a signing key once:
 

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -55,7 +55,22 @@ jobs:
           chmod +x gradlew
           ./gradlew :core:test :app:assembleRelease --stacktrace
 
+      - name: Rename APK
+        run: cp app/build/outputs/apk/release/*.apk NuvioWatch.apk
+
       - uses: actions/upload-artifact@v4
         with:
           name: NuvioWatch-apk
-          path: app/build/outputs/apk/release/*.apk
+          path: NuvioWatch.apk
+
+      # Only builds signed with the permanent key are published, so they always install over each other.
+      - name: Publish release
+        if: env.SIGNING_KEYSTORE_BASE64 != '' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="1.0.${GITHUB_RUN_NUMBER}"
+          gh release create "v$version" NuvioWatch.apk \
+            --title "Nuvio Watch $version" \
+            --notes "Install NuvioWatch.apk on Android. It installs over any earlier version." \
+            --latest
