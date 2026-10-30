@@ -53,7 +53,13 @@ jobs:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew :core:test :app:assembleRelease --stacktrace
+          set -o pipefail
+          ./gradlew :core:test :app:assembleRelease --stacktrace 2>&1 | tee build.log
+
+      - name: Report build errors
+        if: failure()
+        run: |
+          grep -E '^e: |error:|What went wrong' -A2 build.log | head -40 | while IFS= read -r line; do echo "::error::$line"; done
 
       - name: Rename APK
         run: cp app/build/outputs/apk/release/*.apk NuvioWatch.apk
