@@ -29,9 +29,10 @@ android {
         if (!keystore.isNullOrBlank()) {
             create("fixed") {
                 storeFile = file(keystore)
-                storePassword = System.getenv("SIGNING_STORE_PASSWORD")
-                keyAlias = System.getenv("SIGNING_KEY_ALIAS")
-                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+                // Pasted secrets often end with a stray newline.
+                storePassword = System.getenv("SIGNING_STORE_PASSWORD")?.trim()
+                keyAlias = System.getenv("SIGNING_KEY_ALIAS")?.trim()
+                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")?.trim()
             }
         }
     }
