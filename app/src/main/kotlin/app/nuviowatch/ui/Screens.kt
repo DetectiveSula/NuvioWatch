@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nuviowatch.core.AlertPolicy
 import app.nuviowatch.core.LiveState
+import app.nuviowatch.core.Profile
 import app.nuviowatch.core.Viewing
 import app.nuviowatch.core.episodeLabel
 import app.nuviowatch.monitor.Notifier
@@ -107,7 +108,7 @@ private fun ScreenHeader(title: String, trailing: @Composable () -> Unit = {}) {
 @Composable
 private fun ProfileChips(state: UiState, selected: Int?, onSelect: (Int?) -> Unit) {
     @Composable
-    fun Chip(label: String, dot: Color?, active: Boolean, onClick: () -> Unit) {
+    fun Chip(label: String, profile: Profile?, active: Boolean, onClick: () -> Unit) {
         val shape = RoundedCornerShape(50)
         Row(
             Modifier
@@ -116,11 +117,11 @@ private fun ProfileChips(state: UiState, selected: Int?, onSelect: (Int?) -> Uni
                 .background(if (active) Color.White else Color.Transparent)
                 .border(1.dp, if (active) Color.White else Color(0x33FFFFFF), shape)
                 .clickable(role = Role.Tab, onClick = onClick)
-                .padding(start = if (dot != null) 6.dp else 14.dp, end = 14.dp),
+                .padding(start = if (profile != null) 5.dp else 14.dp, end = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (dot != null) {
-                Box(Modifier.size(24.dp).clip(CircleShape).background(dot))
+            if (profile != null) {
+                ProfileAvatar(profile, size = 26.dp)
                 Spacer(Modifier.width(8.dp))
             }
             Text(label, color = if (active) Ink else TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
@@ -129,7 +130,7 @@ private fun ProfileChips(state: UiState, selected: Int?, onSelect: (Int?) -> Uni
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
         item { Chip("Everyone", null, selected == null) { onSelect(null) } }
         items(state.snapshot.profiles, key = { it.index }) { p ->
-            Chip(p.name, parseColor(p.avatarColorHex), selected == p.index) { onSelect(p.index) }
+            Chip(p.name, p, selected == p.index) { onSelect(p.index) }
         }
     }
 }
@@ -342,7 +343,7 @@ fun StatsScreen(state: UiState) {
                         Row(Modifier.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(p?.name ?: "Profile $index", Modifier.width(64.dp), fontSize = 13.sp, color = Color(0xFFD6D1E6), maxLines = 1)
                             Box(Modifier.weight(1f)) {
-                                ThinProgress(ms.toFloat() / max, parseColor(p?.avatarColorHex ?: "#8C9BFF"), height = 10.dp, track = Color(0x14FFFFFF))
+                                ThinProgress(ms.toFloat() / max, visibleOnDark(parseColor(p?.avatarColorHex ?: "#8C9BFF")), height = 10.dp, track = Color(0x14FFFFFF))
                             }
                             Text(formatDuration(ms), Modifier.width(64.dp).padding(start = 8.dp), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                         }

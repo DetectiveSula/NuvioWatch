@@ -26,11 +26,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +46,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -108,7 +112,10 @@ fun NuvioWatchTheme(content: @Composable () -> Unit) {
         headlineMedium = base.headlineMedium.copy(fontFamily = Grotesk, fontWeight = FontWeight.Bold),
         headlineSmall = base.headlineSmall.copy(fontFamily = Grotesk, fontWeight = FontWeight.Bold),
     )
-    MaterialTheme(colorScheme = colors, typography = typography, content = content)
+    MaterialTheme(colorScheme = colors, typography = typography) {
+        // Screens draw straight on the background (no Surface), so set the default text colour here.
+        CompositionLocalProvider(LocalContentColor provides TextPrimary, content = content)
+    }
 }
 
 /** Big display numbers and titles. */
@@ -120,6 +127,10 @@ val Eyebrow = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSp
 
 fun parseColor(hex: String, fallback: Color = Accent): Color =
     runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(fallback)
+
+/** A profile colour light enough to see on the dark background. */
+fun visibleOnDark(color: Color): Color =
+    if (color.luminance() < 0.2f) lerp(color, Color.White, 0.5f - color.luminance()) else color
 
 // ---------------------------------------------------------------- Poster colour
 
@@ -297,7 +308,7 @@ fun FloatingNav(items: List<NavItem>, selected: Int, onSelect: (Int) -> Unit, mo
             val active = i == selected
             Row(
                 Modifier
-                    .weight(1f)
+                    .weight(if (active) 1.6f else 1f)
                     .height(46.dp)
                     .clip(RoundedCornerShape(23.dp))
                     .background(if (active) Color.White else Color.Transparent)
@@ -309,7 +320,7 @@ fun FloatingNav(items: List<NavItem>, selected: Int, onSelect: (Int) -> Unit, mo
                 Icon(item.icon, contentDescription = null, tint = if (active) Ink else Color(0xFFD6D1E6), modifier = Modifier.size(20.dp))
                 if (active) {
                     Spacer(Modifier.width(6.dp))
-                    Text(item.label, color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                    Text(item.label, color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, softWrap = false)
                 }
             }
         }
