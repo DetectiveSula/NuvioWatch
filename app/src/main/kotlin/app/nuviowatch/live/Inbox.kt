@@ -84,6 +84,8 @@ object Inbox {
         if (forMe && fresh) {
             if (r.toDeviceId == prefs.deviceId && ReactionOverlay.canShow(context)) {
                 ReactionOverlay.show(context, r.emoji, r.fromName)
+            } else if (r.toDeviceId == prefs.deviceId && ReactionOverlay.isTv(context)) {
+                ReactionOverlay.showMessage(context, r.emoji, r.fromName)
             } else {
                 Notifier.showReaction(context, r)
             }

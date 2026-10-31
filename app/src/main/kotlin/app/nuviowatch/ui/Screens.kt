@@ -1174,7 +1174,7 @@ private fun DeviceCard(state: UiState, vm: MainViewModel) {
             Text("Reactions over the video", fontWeight = FontWeight.Medium)
             Text(
                 if (overlayOk) "On ✓ Reactions float up over Nuvio while it plays here."
-                else "Lets reactions float up over the picture on this device, instead of a notification.",
+                else "Lets reactions float up over the picture on this device. Without it, TVs still show a small pop-up message over the video.",
                 style = MaterialTheme.typography.bodySmall,
                 color = if (overlayOk) Color(0xFF7CE0C3) else TextMuted,
             )

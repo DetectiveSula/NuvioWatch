@@ -22,6 +22,18 @@ object ReactionOverlay {
     /** For TVs without a settings screen for it. */
     fun adbCommand(context: Context) = "adb shell appops set ${context.packageName} SYSTEM_ALERT_WINDOW allow"
 
+    /**
+     * Without "Display over other apps" (most Fire Sticks have no screen for it), a plain
+     * pop-up message still shows over the video: Android lets any app show one, no permission needed.
+     */
+    fun showMessage(context: Context, emoji: String, from: String) {
+        Handler(Looper.getMainLooper()).post {
+            runCatching { android.widget.Toast.makeText(context.applicationContext, "$emoji  $from", android.widget.Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    fun isTv(context: Context) = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
+
     fun show(context: Context, emoji: String, from: String) {
         if (!canShow(context)) return
         Handler(Looper.getMainLooper()).post {

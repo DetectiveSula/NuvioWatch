@@ -208,7 +208,7 @@ private fun DeviceStep(state: UiState, vm: MainViewModel) {
             okText = "Notification access allowed ✓",
             button = "Allow notification access",
             hint = "Only used to see Nuvio's play and pause state. On a Fire Stick, run this once from a computer instead: ${state.device.adbCommand}",
-        ) { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        ) { runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
     }
 
     Spacer(Modifier.height(4.dp))
@@ -219,9 +219,11 @@ private fun DeviceStep(state: UiState, vm: MainViewModel) {
         ok = overlayOk,
         okText = "Reactions will float over Nuvio here ✓",
         button = "Allow display over other apps",
-        hint = "Otherwise reactions arrive as notifications. On a Fire Stick: ${ReactionOverlay.adbCommand(context)}",
+        hint = "Otherwise reactions show as a small pop-up message (on TVs) or a notification. For the full animation on a Fire Stick: ${ReactionOverlay.adbCommand(context)}",
     ) {
-        context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        runCatching {
+            context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
     }
 }
 
