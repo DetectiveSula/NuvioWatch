@@ -60,6 +60,17 @@ jobs:
         if: failure()
         run: |
           grep -E '^e: |error:|What went wrong|Caused by|[Kk]eystore|password|alias|Tag number' -A2 build.log | grep -v '^\s*at ' | head -60 | while IFS= read -r line; do echo "::error::$line"; done
+          # Failing unit tests: name and message of each.
+          for f in core/build/test-results/test/*.xml; do
+            [ -f "$f" ] || continue
+            python3 - "$f" <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          for case in ET.parse(sys.argv[1]).getroot().iter('testcase'):
+              for fail in list(case.findall('failure')) + list(case.findall('error')):
+                  msg = (fail.get('message') or fail.text or '').replace('\n', ' ')[:400]
+                  print(f"::error::Test failed {case.get('classname')}.{case.get('name')}: {msg}")
+          PY
+          done
 
       - name: Rename APK
         run: cp app/build/outputs/apk/release/*.apk NuvioWatch.apk
