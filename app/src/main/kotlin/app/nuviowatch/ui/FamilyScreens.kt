@@ -968,17 +968,3 @@ private fun BestRatedCard(state: UiState) {
         }
     }
 }
-
-@Composable
-private fun SmallChoice(label: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        label,
-        modifier = Modifier.clip(RoundedCornerShape(50))
-            .background(if (selected) Color.White else Color(0x1FFFFFFF))
-            .clickable(role = Role.Checkbox, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        color = if (selected) Ink else TextPrimary,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.SemiBold,
-    )
-}
