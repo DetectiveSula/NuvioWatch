@@ -1,6 +1,8 @@
 package app.nuviowatch.live
 
 import android.content.Context
+import app.nuviowatch.BuildConfig
+import app.nuviowatch.core.FamilyDb
 import app.nuviowatch.core.LiveChannel
 import app.nuviowatch.core.LiveEvent
 import app.nuviowatch.core.LiveRelay
@@ -12,6 +14,22 @@ import app.nuviowatch.graph
 /** Shared helpers for live playback reports. */
 object LiveHub {
     private var cached: Pair<String, LiveRelay>? = null
+    private var cachedDb: Pair<String, FamilyDb>? = null
+
+    /** The family's shared database, or null until signed in. */
+    @Synchronized
+    fun db(context: Context): FamilyDb? {
+        val userId = context.graph.prefs.session?.userId?.takeIf { it.isNotBlank() } ?: return null
+        cachedDb?.let { (id, db) -> if (id == userId) return db }
+        return FamilyDb(BuildConfig.FAMILY_DB_URL, BuildConfig.FAMILY_DB_KEY, userId, context.graph.http).also { cachedDb = userId to it }
+    }
+
+    /** Best effort: store a message so phones that were off can catch up later. */
+    suspend fun store(context: Context, id: String, kind: String, text: String, at: Long) {
+        runCatching { db(context)?.add(id, kind, text, at) }
+            .onFailure { context.graph.prefs.setStatus("database", "Couldn't save: ${it.message}") }
+            .onSuccess { context.graph.prefs.setStatus("database", "Saved $kind") }
+    }
 
     /** The account's relay, or null until signed in. */
     @Synchronized

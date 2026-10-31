@@ -45,11 +45,23 @@ struct LiveEvent: Codable {
     let at: Int64
 }
 
+/// The family's shared database (see supabase/setup.sql). The publishable key is meant to ship in apps.
+let familyDbURL = "https://abkwdwlihhyyhejdjihm.supabase.co"
+let familyDbKey = "sb_publishable_MX1ApdkrbjXLgWLc2hRl4A_ZcCDXjoN"
+
+func sha256Hex(_ text: String) -> String {
+    SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+}
+
 final class Channel {
     let topic: String
     private let key: SymmetricKey
+    private let familyKey: String
+    private let family: String
 
     init(userId: String) {
+        familyKey = sha256Hex("nuvio-watch-db:\(userId)")
+        family = sha256Hex(familyKey)
         let topicHash = SHA256.hash(data: Data("nuvio-watch-topic:\(userId)".utf8))
         topic = "nw-" + topicHash.map { String(format: "%02x", $0) }.joined().prefix(32)
         key = SymmetricKey(data: Data(SHA256.hash(data: Data("nuvio-watch-key:\(userId)".utf8))))
@@ -62,10 +74,32 @@ final class Channel {
         return combined.base64EncodedString()
     }
 
+    /// Keeps a copy in the family database, so exact watch time and history last.
+    func store(_ event: LiveEvent, encrypted: String) {
+        guard let url = URL(string: "\(familyDbURL)/rest/v1/messages") else { return }
+        let row: [String: Any] = ["id": "\(event.deviceId)-\(event.at)", "family": family, "kind": "playback", "payload": encrypted, "at": event.at]
+        guard let body = try? JSONSerialization.data(withJSONObject: row) else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(familyDbKey, forHTTPHeaderField: "apikey")
+        request.setValue(familyKey, forHTTPHeaderField: "x-family-key")
+        request.setValue("resolution=ignore-duplicates,return=minimal", forHTTPHeaderField: "Prefer")
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            if let error = error {
+                log("database save failed: \(error.localizedDescription)")
+            } else if let http = response as? HTTPURLResponse, http.statusCode >= 300 {
+                log("database save failed: \(http.statusCode)")
+            }
+        }.resume()
+    }
+
     func publish(_ event: LiveEvent) {
         guard let json = try? JSONEncoder().encode(event),
               let body = try? encrypt(String(decoding: json, as: UTF8.self)),
               let url = URL(string: "https://ntfy.sh/\(topic)") else { return }
+        if let stored = try? encrypt(String(decoding: json, as: UTF8.self)) { store(event, encrypted: stored) }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.httpBody = Data(body.utf8)

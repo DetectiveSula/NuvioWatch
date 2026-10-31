@@ -137,6 +137,7 @@ class NowPlayingListener : NotificationListenerService() {
                 prefs.setStatus("send", "Not sending: account id missing, sign out and in again")
                 return@launch
             }
+            LiveHub.store(this@NowPlayingListener, "${event.deviceId}-${event.at}", "playback", app.nuviowatch.core.Social.encode(event), event.at)
             runCatching { relay.publish(event) }
                 .onSuccess { prefs.setStatus("send", "Sent \"${event.state.name.lowercase()}\" · ${event.title}") }
                 .onFailure { prefs.setStatus("send", "Send failed: ${it.message}") }

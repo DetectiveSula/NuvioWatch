@@ -170,7 +170,12 @@ class Prefs(context: Context) : SessionStore {
     fun myName(profiles: List<app.nuviowatch.core.Profile>): String =
         deviceProfile?.let { index -> profiles.firstOrNull { it.index == index }?.name } ?: deviceName
 
-        /** True once the first-launch setup has been finished or skipped. */
+        /** Newest database message already fetched (epoch ms). */
+    var dbSince: Long?
+        get() = prefs.getLong("db_since", -1).takeIf { it >= 0 }
+        set(value) = prefs.edit { putLong("db_since", value ?: -1) }
+
+    /** True once the first-launch setup has been finished or skipped. */
     var onboarded: Boolean
         get() = prefs.getBoolean("onboarded", false)
         set(value) = prefs.edit { putBoolean("onboarded", value) }

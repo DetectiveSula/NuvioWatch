@@ -1001,6 +1001,8 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
 
             MacCard(state)
 
+            WebCard(state)
+
             GlassCard {
                 SectionTitle("Status")
                 state.statuses.forEach { (label, value) ->
@@ -1040,6 +1042,39 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
             }
         }
         Spacer(Modifier.navigationBarsPadding().height(BottomSpace))
+    }
+}
+
+/** The family web dashboard, for iPhones and laptops. */
+@Composable
+private fun WebCard(state: UiState) {
+    val context = LocalContext.current
+    val link = "https://detectivesula.github.io/NuvioWatch/#code=${state.accountId}"
+    GlassCard {
+        SectionTitle("Web dashboard")
+        Text(
+            "Who's watching live, the leaderboard and this month's stats in any browser, including iPhones and laptops. You can send reactions from it too.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextMuted,
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) } },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Ink),
+            ) { Text("Open") }
+            OutlinedButton(onClick = {
+                context.startActivity(
+                    Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), "Share the family dashboard"),
+                )
+            }) { Text("Share link") }
+        }
+        Text(
+            "The link contains your setup code, so only share it within the family.",
+            fontSize = 11.sp,
+            color = TextMuted,
+            modifier = Modifier.padding(top = 6.dp),
+        )
     }
 }
 

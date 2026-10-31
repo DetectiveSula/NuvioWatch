@@ -74,6 +74,7 @@ class MonitorService : Service() {
                 continue
             }
             try {
+                Inbox.catchUp(this)
                 prefs.setStatus("stream", "Connecting…")
                 relay.listen(
                     since = prefs.liveSince ?: "15m",

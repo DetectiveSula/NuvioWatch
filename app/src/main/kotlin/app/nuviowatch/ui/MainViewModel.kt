@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import app.nuviowatch.core.EpisodeInfo
 import app.nuviowatch.core.UpdateInfo
 import app.nuviowatch.data.AppUpdater
+import app.nuviowatch.data.Dashboard
+import app.nuviowatch.core.Fun
+import app.nuviowatch.core.LiveSessions
 import app.nuviowatch.core.LiveEvent
 import app.nuviowatch.core.Outcome
 import app.nuviowatch.core.Prediction
@@ -89,6 +92,8 @@ data class UiState(
     /** The account id; it's also the Mac helper's setup code. */
     val accountId: String = "",
     val onboarded: Boolean = true,
+    /** Exact time each profile spent playing on live devices this week. */
+    val liveTime: Map<Int, Long> = emptyMap(),
     val update: UpdateInfo? = null,
     /** Progress or problems while updating. */
     val updateMessage: String? = null,
@@ -130,6 +135,7 @@ data class UiState(
 }
 
 private data class Local(
+    val liveTime: Map<Int, Long> = emptyMap(),
     val update: UpdateInfo? = null,
     val updateMessage: String? = null,
     val onboarded: Boolean = true,
@@ -171,6 +177,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             onboarded = local.onboarded,
             update = local.update,
             updateMessage = local.updateMessage,
+            liveTime = local.liveTime,
             server = local.server,
             serverUrl = prefs.serverConfig?.baseUrl.orEmpty(),
             nuvioInstalled = graph.isNuvioInstalled,
@@ -262,6 +269,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 local.update { it.copy(loading = false) }
                 NowWidget.update(getApplication())
                 Nudges.announceBadges(getApplication(), snapshot)
+                launch { syncFamilyDb(snapshot) }
                 // Episode lists for shows watched in the last two months, for "Up next".
                 val since = System.currentTimeMillis() - 60 * 86_400_000L
                 val series = snapshot.progress.values.flatten().filter { it.season != null && it.lastWatchedMs > since }.map { it.contentId } +
@@ -314,6 +322,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val ok = Inbox.react(getApplication(), live.event, live.profile?.index, emoji)
         val who = live.profile?.name ?: live.event.deviceName
         local.update { it.copy(social = it.social.copy(reactions = prefs.reactions, message = if (ok) "Sent $emoji to $who" else "Couldn't send, check your connection")) }
+    }
+
+    /** Catches up on missed messages, works out exact live time, and uploads the web dashboard. */
+    private suspend fun syncFamilyDb(snapshot: Snapshot) {
+        val app = getApplication<Application>()
+        Inbox.catchUp(app)
+        val db = LiveHub.db(app) ?: return
+        val now = System.currentTimeMillis()
+        val titles = graph.titles.titles.value
+        val weekStart = Fun.weekStart(now).toInstant().toEpochMilli()
+        val events = runCatching { db.since(weekStart - 10 * 60_000L, setOf("playback"), limit = 5000) }.getOrNull().orEmpty()
+            .mapNotNull { Social.parse(it.text) as? LiveEvent }
+        val perDevice = LiveSessions.playingTime(events, weekStart, now)
+        val liveTime = mutableMapOf<Int, Long>()
+        for ((key, ms) in perDevice) {
+            val sample = events.lastOrNull { it.deviceId == key.first && it.title == key.second } ?: continue
+            val profile = sample.profileIndex ?: LiveHub.profileFor(sample, snapshot, titles)?.index ?: continue
+            liveTime.merge(profile, ms, Long::plus)
+        }
+        local.update { it.copy(liveTime = liveTime) }
+        val viewings = state.value.viewings
+        runCatching { db.saveDashboard(Dashboard.build(snapshot, titles, viewings, liveTime, now)) }
+            .onFailure { prefs.setStatus("database", "Couldn't save dashboard: ${it.message}") }
     }
 
     fun checkForUpdate(manual: Boolean = false) = viewModelScope.launch {
@@ -416,6 +447,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             "Media reader here" to if (access) line("listener", "Not connected yet") else "Needs notification access",
             "Nuvio player here" to line("player", "Not seen yet"),
             "Last report sent from here" to line("send", "None yet"),
+            "Family database" to line("database", "Not used yet"),
         )
     }
 

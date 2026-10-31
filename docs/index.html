@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0A0910">
+<meta name="robots" content="noindex">
+<title>Nuvio Watch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0A0910; --text: #F4F2FA; --muted: #B9B3CC; --glass: rgba(255,255,255,0.06);
+    --border: rgba(255,255,255,0.09); --accent: #8C9BFF; --live: #FF5C7A; --gold: #FFD166;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ink); color: var(--text);
+    font: 15px/1.45 Inter, system-ui, sans-serif;
+    background-image: radial-gradient(1200px 700px at 50% -200px, rgba(91,63,209,0.45), transparent 70%);
+    background-repeat: no-repeat; min-height: 100vh;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1, h2, .num { font-family: "Space Grotesk", sans-serif; letter-spacing: -0.02em; margin: 0; }
+  h1 { font-size: 34px; }
+  h2 { font-size: 13px; font-family: Inter, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+  .muted { color: var(--muted); }
+  .card { background: var(--glass); border: 1px solid var(--border); border-radius: 22px; padding: 18px; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 14px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 0 rgba(255,92,122,.7); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 70% { box-shadow: 0 0 0 9px rgba(255,92,122,0); } 100% { box-shadow: 0 0 0 0 rgba(255,92,122,0); } }
+  .live { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-top: 18px; }
+  .live-card { position: relative; overflow: hidden; border-radius: 24px; min-height: 230px; padding: 18px; display: flex; flex-direction: column; justify-content: flex-end; background: #2a2240; border: 1px solid var(--border); }
+  .live-card img.bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .55; }
+  .live-card::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,9,16,.1), rgba(10,9,16,.95)); }
+  .live-card > * { position: relative; z-index: 1; }
+  .live-card .title { font-family: "Space Grotesk", sans-serif; font-size: 26px; font-weight: 700; line-height: 1.1; margin: 4px 0; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+  .reactions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .reactions button { font-size: 20px; width: 42px; height: 42px; border-radius: 50%; border: 0; background: rgba(255,255,255,.15); cursor: pointer; }
+  .reactions button:hover { background: rgba(255,255,255,.28); }
+  .row { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+  .row + .row { border-top: 1px solid rgba(255,255,255,.06); }
+  .avatar { width: 38px; height: 38px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 700; overflow: hidden; color: #fff; }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .bar { height: 7px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 6px; }
+  .bar > span { display: block; height: 100%; border-radius: 4px; }
+  .poster { width: 40px; height: 60px; border-radius: 8px; object-fit: cover; background: #221f2e; flex: none; }
+  .posters { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
+  .posters figure { margin: 0; width: 110px; flex: none; }
+  .posters img { width: 110px; height: 165px; border-radius: 14px; object-fit: cover; background: #221f2e; }
+  .posters figcaption { font-size: 12px; margin-top: 6px; }
+  .big { font-size: 46px; font-weight: 700; }
+  form { display: grid; gap: 12px; max-width: 460px; margin: 18vh auto 0; }
+  input, select { width: 100%; padding: 14px; border-radius: 12px; border: 1px solid #5A6070; background: transparent; color: var(--text); font: inherit; }
+  select option { color: #000; }
+  button.primary { padding: 14px; border-radius: 26px; border: 0; background: #fff; color: var(--ink); font: 600 16px Inter, sans-serif; cursor: pointer; }
+  .feed { font-size: 14px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #1a1724; border: 1px solid var(--border); padding: 10px 16px; border-radius: 999px; opacity: 0; transition: opacity .3s; }
+  .toast.show { opacity: 1; }
+  .empty { padding: 26px; text-align: center; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main id="app"></main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+// Nuvio Watch web dashboard. Everything is decrypted in this browser with keys derived
+// from the family setup code; the code never leaves this device.
+const DB_URL = "https://abkwdwlihhyyhejdjihm.supabase.co";
+const DB_KEY = "sb_publishable_MX1ApdkrbjXLgWLc2hRl4A_ZcCDXjoN";
+const RELAY = "https://ntfy.sh";
+
+const enc = new TextEncoder(), dec = new TextDecoder();
+const $ = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+const sha = (text) => crypto.subtle.digest("SHA-256", enc.encode(text));
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+
+function duration(ms) {
+  const m = Math.floor(ms / 60000), h = Math.floor(m / 60);
+  return h >= 100 ? `${h}h` : h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
+}
+function ago(ms) {
+  const s = (Date.now() - ms) / 1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} hr ago`;
+  return `${Math.floor(s / 86400)} days ago`;
+}
+function toast(text) { const t = document.getElementById("toast"); t.textContent = text; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2500); }
+const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+let keys, dashboard = null, devices = {}, reactions = [];
+
+async function deriveKeys(code) {
+  const topic = "nw-" + hex(await sha("nuvio-watch-topic:" + code)).slice(0, 32);
+  const aes = await crypto.subtle.importKey("raw", await sha("nuvio-watch-key:" + code), "AES-GCM", false, ["encrypt", "decrypt"]);
+  const familyKey = hex(await sha("nuvio-watch-db:" + code));
+  const family = hex(await sha(familyKey));
+  return { topic, aes, familyKey, family };
+}
+async function decrypt(b64) {
+  try {
+    const bytes = Uint8Array.from(atob(b64.trim()), (c) => c.charCodeAt(0));
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes.slice(0, 12) }, keys.aes, bytes.slice(12));
+    return JSON.parse(dec.decode(plain));
+  } catch { return null; }
+}
+async function encrypt(obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, keys.aes, enc.encode(JSON.stringify(obj))));
+  const all = new Uint8Array(12 + sealed.length); all.set(iv); all.set(sealed, 12);
+  return btoa(String.fromCharCode(...all));
+}
+const dbHeaders = () => ({ apikey: DB_KEY, "x-family-key": keys.familyKey });
+
+async function loadDashboard() {
+  const res = await fetch(`${DB_URL}/rest/v1/dashboards?select=payload`, { headers: dbHeaders() });
+  const rows = res.ok ? await res.json() : [];
+  dashboard = rows[0] ? await decrypt(rows[0].payload) : null;
+}
+async function loadRecent() {
+  const since = Date.now() - 6 * 3600 * 1000;
+  const res = await fetch(`${DB_URL}/rest/v1/messages?select=kind,payload,at&at=gt.${since}&kind=in.(playback,reaction)&order=at.asc&limit=1000`, { headers: dbHeaders() });
+  if (!res.ok) return;
+  for (const row of await res.json()) {
+    const m = await decrypt(row.payload);
+    if (m) handle(m, false);
+  }
+}
+function handle(m, fresh) {
+  if (m.type === "reaction") {
+    if (!reactions.some((r) => r.id === m.id)) reactions.push(m);
+    if (fresh) toast(`${m.emoji} ${m.fromName} reacted to ${m.title}`);
+  } else if (m.state && m.deviceId) {
+    const prev = devices[m.deviceId];
+    if (!prev || prev.at <= m.at) devices[m.deviceId] = m;
+  }
+}
+function listen() {
+  const es = new EventSource(`${RELAY}/${keys.topic}/sse`);
+  es.onmessage = async (e) => {
+    let data; try { data = JSON.parse(e.data); } catch { return; }
+    if (data.event !== "message") return;
+    const m = await decrypt(data.message);
+    if (m) { handle(m, true); render(); }
+  };
+}
+
+function profile(index) { return dashboard?.profiles?.find((p) => p.index === index); }
+function profileForEvent(e) {
+  if (e.profileIndex != null) return profile(e.profileIndex);
+  const hit = (dashboard?.recent || []).find((r) => norm(r.title) === norm(e.title) || norm(e.title).startsWith(norm(r.title) + " "));
+  return hit ? profile(hit.profile) : null;
+}
+function posterFor(title) {
+  const all = [...(dashboard?.recent || []), ...(dashboard?.topTitles || [])];
+  return all.find((r) => (r.title || r.name) && norm(r.title || r.name) === norm(title))?.poster;
+}
+function avatar(p, size = 38) {
+  if (!p) return `<div class="avatar" style="width:${size}px;height:${size}px;background:#333">?</div>`;
+  const inner = p.avatar ? `<img src="${esc(p.avatar)}" alt="">` : esc(p.name[0] || "?");
+  return `<div class="avatar" style="width:${size}px;height:${size}px;background:${esc(p.color)}">${inner}</div>`;
+}
+
+async function react(device, emoji) {
+  const me = store.get("nw-me");
+  const meProfile = me != null && me !== "" ? profile(Number(me)) : null;
+  const target = profileForEvent(device);
+  const r = {
+    type: "reaction", id: crypto.randomUUID(), fromDeviceId: "web-" + (store.get("nw-web-id") || "browser"),
+    fromName: meProfile?.name || "Web", toProfile: target?.index ?? null, toDeviceId: device.deviceId,
+    emoji, title: device.title, at: Date.now(),
+  };
+  const sealed = await encrypt(r);
+  await fetch(`${RELAY}/${keys.topic}`, { method: "POST", body: sealed });
+  fetch(`${DB_URL}/rest/v1/messages`, {
+    method: "POST",
+    headers: { ...dbHeaders(), "Content-Type": "application/json", Prefer: "resolution=ignore-duplicates,return=minimal" },
+    body: JSON.stringify({ id: r.id, family: keys.family, kind: "reaction", payload: sealed, at: r.at }),
+  });
+  reactions.push(r);
+  toast(`Sent ${emoji} to ${target?.name || device.deviceName}`);
+  render();
+}
+
+function render() {
+  const app = document.getElementById("app");
+  const now = Date.now();
+  const live = Object.values(devices).filter((d) => d.state !== "STOPPED" && now - d.at < 5 * 60000).sort((a, b) => b.at - a.at);
+  const profiles = dashboard?.profiles || [];
+  const me = store.get("nw-me") ?? "";
+
+  app.replaceChildren($(`<div>
+    <header>
+      <div><h1>Nuvio Watch</h1>
+        <div class="muted">${live.length ? `<span class="pill" style="background:rgba(255,92,122,.15);color:#FF8AA0"><span class="dot"></span>${live.length} watching now</span>` : "Nobody's watching right now"}
+        ${dashboard ? ` · updated ${ago(dashboard.updatedAt)}` : ""}</div></div>
+      <label class="muted" style="font-size:13px">I am
+        <select id="me" style="width:auto;padding:8px 10px;margin-left:6px">
+          <option value="">(not set)</option>
+          ${profiles.map((p) => `<option value="${p.index}" ${String(p.index) === me ? "selected" : ""}>${esc(p.name)}</option>`).join("")}
+        </select></label>
+    </header>
+
+    <section class="live">${live.map((d) => {
+      const p = profileForEvent(d), poster = posterFor(d.title), playing = d.state === "PLAYING";
+      return `<article class="live-card">
+        ${poster ? `<img class="bg" src="${esc(poster)}" alt="">` : ""}
+        <div class="eyebrow" style="color:${playing ? "#FFB3C1" : "var(--muted)"}">${playing ? '<span class="dot" style="display:inline-block;margin-right:6px"></span>' : ""}${esc(p?.name || "Someone")} ${playing ? "is watching" : "paused"} · ${esc(d.deviceName)}</div>
+        <div class="title">${esc(d.title)}</div>
+        ${d.subtitle ? `<div class="muted">${esc(d.subtitle)}</div>` : ""}
+        <div class="reactions">${["🔥", "😂", "😱", "😭", "💤", "👏", "❤️"].map((e) => `<button data-device="${esc(d.deviceId)}" data-emoji="${e}" aria-label="React ${e}">${e}</button>`).join("")}</div>
+      </article>`;
+    }).join("")}</section>
+
+    ${!dashboard ? `<div class="card empty" style="margin-top:14px">No family summary yet. Open Nuvio Watch on a phone and pull down to refresh; it uploads one.</div>` : `
+    <div class="grid">
+      <section class="card"><h2>This week</h2>
+        ${(dashboard.leaderboard || []).map((e, i) => {
+          const p = profile(e.index), top = Math.max(1, dashboard.leaderboard[0].points);
+          return `<div class="row"><span class="num" style="width:22px;color:${i === 0 ? "var(--gold)" : "var(--muted)"}">${i + 1}</span>
+            ${avatar(p)}<div style="flex:1"><div><b>${esc(p?.name)}</b> ${dashboard.champion === e.index ? "👑" : ""} ${p?.streak >= 2 ? `🔥${p.streak}` : ""}</div>
+            <div class="bar"><span style="width:${(e.points / top) * 100}%;background:${esc(p?.color || "#8C9BFF")}"></span></div></div>
+            <div class="num" style="font-size:20px">${e.points}<span class="muted" style="font-size:12px"> pts</span></div></div>`;
+        }).join("")}
+      </section>
+
+      <section class="card"><h2>${esc(dashboard.month?.label || "This month")} so far</h2>
+        <div class="num big">${duration(dashboard.month?.totalMs || 0)}</div>
+        <div class="muted">${dashboard.month?.episodes || 0} episodes · ${dashboard.month?.films || 0} films</div>
+        ${dashboard.month?.topTitle ? `<div class="row" style="margin-top:10px">${dashboard.month.topPoster ? `<img class="poster" src="${esc(dashboard.month.topPoster)}" alt="">` : ""}
+          <div><div class="muted" style="font-size:12px">MOST WATCHED</div><b>${esc(dashboard.month.topTitle)}</b></div></div>` : ""}
+        ${dashboard.month?.topWatcher != null ? `<div class="muted">Top watcher: <b style="color:var(--text)">${esc(profile(dashboard.month.topWatcher)?.name)}</b></div>` : ""}
+      </section>
+
+      <section class="card"><h2>Everyone</h2>
+        ${profiles.map((p) => `<div class="row">${avatar(p)}<div style="flex:1"><b>${esc(p.name)}</b>
+          <div class="muted" style="font-size:13px">${esc(p.personality)} · ${p.badges} badges${p.liveWeekMs ? ` · ${duration(p.liveWeekMs)} live this week` : ""}</div></div></div>`).join("")}
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:14px"><h2>Top titles · 30 days</h2>
+      <div class="posters">${(dashboard.topTitles || []).map((t) => `<figure>${t.poster ? `<img src="${esc(t.poster)}" alt="">` : `<div style="width:110px;height:165px;border-radius:14px;background:#221f2e"></div>`}
+        <figcaption><b>${esc(t.name)}</b><div class="muted">${duration(t.ms)}</div></figcaption></figure>`).join("")}</div>
+    </section>
+
+    <div class="grid">
+      <section class="card"><h2>Recently watched</h2>
+        ${(dashboard.recent || []).slice(0, 12).map((r) => `<div class="row">${r.poster ? `<img class="poster" src="${esc(r.poster)}" alt="">` : ""}
+          <div style="flex:1;min-width:0"><b>${esc(r.title)}</b><div class="muted" style="font-size:13px">${[r.episode, profile(r.profile)?.name, ago(r.at)].filter(Boolean).map(esc).join(" · ")}</div></div>
+          <span class="muted">${r.done ? "✓" : Math.round(r.fraction * 100) + "%"}</span></div>`).join("")}
+      </section>
+      <section class="card feed"><h2>Reactions</h2>
+        ${reactions.slice(-12).reverse().map((r) => `<div class="row"><span style="font-size:22px">${esc(r.emoji)}</span>
+          <div><b>${esc(r.fromName)}</b> → ${esc(r.toProfile != null ? profile(r.toProfile)?.name : "TV")} <span class="muted">· ${esc(r.title)} · ${ago(r.at)}</span></div></div>`).join("") || '<div class="muted">No reactions in the last few hours.</div>'}
+      </section>
+    </div>`}
+    <p class="muted" style="font-size:12px;margin-top:20px">Private to your family: everything is encrypted with your setup code and decrypted only in this browser.
+      <a href="#" id="forget">Forget code on this device</a></p>
+  </div>`));
+
+  app.querySelectorAll(".reactions button").forEach((b) => b.addEventListener("click", () => react(devices[b.dataset.device], b.dataset.emoji)));
+  app.querySelector("#me")?.addEventListener("change", (e) => { store.set("nw-me", e.target.value); render(); });
+  app.querySelector("#forget")?.addEventListener("click", (e) => { e.preventDefault(); try { localStorage.clear(); } catch {} location.hash = ""; location.reload(); });
+}
+
+function askForCode(message) {
+  document.getElementById("app").replaceChildren($(`<form id="code-form">
+    <h1>Nuvio Watch</h1>
+    <p class="muted">Enter your family setup code. On an Android phone it's in Nuvio Watch → Settings → Mac (Nuvio Desktop): the long code with dashes.</p>
+    ${message ? `<p style="color:#FF8AA0">${esc(message)}</p>` : ""}
+    <label for="code" class="muted">Setup code</label>
+    <input id="code" autocomplete="off" spellcheck="false" placeholder="1a2b3c4d-1234-…" required>
+    <button class="primary" type="submit">Open dashboard</button>
+  </form>`));
+  document.getElementById("code-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const code = document.getElementById("code").value.trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)) return askForCode("That doesn't look like a setup code.");
+    store.set("nw-code", code);
+    start(code);
+  });
+}
+
+async function start(code) {
+  keys = await deriveKeys(code);
+  if (!store.get("nw-web-id")) store.set("nw-web-id", crypto.randomUUID().slice(0, 8));
+  document.getElementById("app").replaceChildren($(`<p class="muted" style="margin-top:20vh;text-align:center">Loading…</p>`));
+  try { await loadDashboard(); await loadRecent(); } catch (e) { console.warn(e); }
+  render();
+  listen();
+  setInterval(() => { loadDashboard().then(render).catch(() => {}); }, 120000);
+  setInterval(render, 30000);
+}
+
+// A code in the link (#code=…) stays in the browser: the part after # is never sent to a server.
+const fromHash = new URLSearchParams(location.hash.slice(1)).get("code");
+if (fromHash) { store.set("nw-code", fromHash); history.replaceState(null, "", location.pathname); }
+const saved = store.get("nw-code");
+saved ? start(saved) : askForCode();
+</script>
+</body>
+</html>

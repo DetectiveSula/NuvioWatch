@@ -539,6 +539,7 @@ private fun ProfilePage(state: UiState, index: Int, onBack: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MiniStat("Streak", "🔥 ${stats.currentStreak}", Modifier.weight(1f))
                 MiniStat("Best streak", "${stats.longestStreak} days", Modifier.weight(1f))
+                state.liveTime[index]?.let { MiniStat("Live this week", formatDuration(it), Modifier.weight(1f)) }
             }
 
             GlassCard(padding = 18.dp) {

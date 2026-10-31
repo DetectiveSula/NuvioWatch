@@ -22,7 +22,7 @@ object Inbox {
     private val mutex = Mutex()
     private val seen = LinkedHashSet<String>()
 
-    suspend fun onMessage(context: Context, id: String, text: String) {
+    suspend fun onMessage(context: Context, id: String, text: String, fromRelay: Boolean = true) {
         val fresh = mutex.withLock {
             if (!seen.add(id)) return
             if (seen.size > 500) seen.remove(seen.first())
@@ -43,7 +43,21 @@ object Inbox {
                 if (forMe && System.currentTimeMillis() - message.at < 30 * 60_000L) Notifier.showPing(context, message)
             }
         }
-        prefs.liveSince = id
+        if (fromRelay) prefs.liveSince = id
+    }
+
+    /** Fetches reactions, predictions and votes stored while this phone was offline. */
+    suspend fun catchUp(context: Context) {
+        val prefs = context.graph.prefs
+        val db = LiveHub.db(context) ?: return
+        val since = prefs.dbSince ?: (System.currentTimeMillis() - 3 * 86_400_000L)
+        runCatching { db.since(since, setOf("reaction", "prediction", "vote")) }
+            .onSuccess { rows ->
+                rows.forEach { onMessage(context, "db-${it.id}", it.text, fromRelay = false) }
+                rows.maxOfOrNull { it.at }?.let { prefs.dbSince = it } ?: run { if (prefs.dbSince == null) prefs.dbSince = since }
+                prefs.setStatus("database", "Up to date (${rows.size} new)")
+            }
+            .onFailure { prefs.setStatus("database", "Couldn't reach it: ${it.message}") }
     }
 
     private fun onReaction(context: Context, r: Reaction) {
@@ -87,6 +101,7 @@ object Inbox {
             at = System.currentTimeMillis(),
         )
         prefs.reactions = prefs.reactions + reaction
+        LiveHub.store(context, reaction.id, "reaction", Social.encode(reaction), reaction.at)
         return send(context, Social.encode(reaction))
     }
 
@@ -110,6 +125,7 @@ object Inbox {
     suspend fun predict(context: Context, prediction: Prediction): Boolean {
         val prefs = context.graph.prefs
         prefs.predictions = prefs.predictions + prediction
+        LiveHub.store(context, prediction.id, "prediction", Social.encode(prediction), prediction.createdAt)
         return send(context, Social.encode(prediction))
     }
 
@@ -124,6 +140,7 @@ object Inbox {
             at = System.currentTimeMillis(),
         )
         prefs.votes = prefs.votes + vote
+        LiveHub.store(context, "${vote.voterId}-${vote.predictionId}-${vote.at}", "vote", Social.encode(vote), vote.at)
         return send(context, Social.encode(vote))
     }
 

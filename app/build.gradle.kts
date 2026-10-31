@@ -21,6 +21,10 @@ android {
         versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
         buildConfigField("String", "DEFAULT_SERVER_URLS", "\"${buildValue("NUVIO_SERVER_URLS")}\"")
         buildConfigField("String", "DEFAULT_SERVER_KEY", "\"${buildValue("NUVIO_SERVER_KEY")}\"")
+        // The family's shared database. The publishable key is meant to ship in apps;
+        // row-level security and the family key protect the data.
+        buildConfigField("String", "FAMILY_DB_URL", "\"https://abkwdwlihhyyhejdjihm.supabase.co\"")
+        buildConfigField("String", "FAMILY_DB_KEY", "\"sb_publishable_MX1ApdkrbjXLgWLc2hRl4A_ZcCDXjoN\"")
     }
 
     signingConfigs {
