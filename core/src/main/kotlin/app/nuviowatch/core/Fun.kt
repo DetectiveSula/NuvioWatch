@@ -111,6 +111,42 @@ data class Wrapped(
     val longestStreak: Pair<Int, Int>? = null,
 )
 
+/** One of the family's top titles in a Wrapped period. */
+data class WrappedTitle(val contentId: String, val ms: Long, val watchers: Int)
+
+/** A person's personality in a Wrapped period, with the number that earned it. */
+data class WrappedPersona(val profileIndex: Int, val personality: Personality, val stat: String)
+
+/** "Who watched the most …?" with every profile's count. */
+data class WrappedQuiz(val genre: String, val answer: Int, val counts: Map<Int, Int>)
+
+/** A fun award: what for, who won and the number behind it. */
+data class WrappedAward(val key: String, val title: String, val profileIndex: Int, val value: String)
+
+/** The extra slides of the Family Wrapped story. */
+data class WrappedPlus(
+    /** Time watched in the same length of time just before, if anything was watched then. */
+    val previousMs: Long?,
+    val topTitles: List<WrappedTitle>,
+    val personas: List<WrappedPersona>,
+    val quiz: WrappedQuiz?,
+    /** Time watched by weekday (Monday first) and time band ([BANDS]). */
+    val heat: List<List<Long>>,
+    /** Busiest weekday (1 = Monday) and band index. */
+    val peak: Pair<Int, Int>?,
+    /** How many weeks the peak slot had someone watching. */
+    val peakWeeks: Int,
+    val latest: Pair<Int, Long>?,
+    val earliest: Pair<Int, Long>?,
+    val awards: List<WrappedAward>,
+) {
+    companion object {
+        /** Morning, afternoon, early evening, evening, late evening, after midnight. */
+        val BANDS = listOf("Morn", "Arvo", "6pm", "8pm", "10pm", "Late")
+        val BAND_NAMES = listOf("mornings", "afternoons", "6pm", "8pm", "10pm", "after midnight")
+    }
+}
+
 /** Games and personality features, all worked out from viewing history. */
 object Fun {
     private fun date(ms: Long, zone: ZoneId) = Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
@@ -529,6 +565,123 @@ object Fun {
                 }
                 p to best
             }.maxByOrNull { it.second }?.takeIf { it.second >= 2 },
+        )
+    }
+
+    // ------------------------------------------------------------ Wrapped extras
+
+    /** Which [WrappedPlus.BANDS] slot an hour falls in. */
+    fun band(hour: Int): Int = when (hour) {
+        in 5..11 -> 0
+        in 12..16 -> 1
+        in 17..18 -> 2
+        in 19..20 -> 3
+        in 21..22 -> 4
+        else -> 5
+    }
+
+    /** Minutes since 5am, so a 1am finish counts as later than 11pm. */
+    private fun nightMinutes(ms: Long, zone: ZoneId): Int {
+        val t = Instant.ofEpochMilli(ms).atZone(zone)
+        return ((t.hour - 5 + 24) % 24) * 60 + t.minute
+    }
+
+    fun wrappedPlus(
+        viewings: List<Viewing>,
+        titles: Map<String, TitleInfo>,
+        from: LocalDate,
+        untilExclusive: LocalDate,
+        nowMs: Long,
+        ratings: List<Rating> = emptyList(),
+        reactionsSent: Map<Int, Int> = emptyMap(),
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): WrappedPlus {
+        fun inside(v: Viewing, a: LocalDate, b: LocalDate) = v.atMs > 0 && v.watchedMs > 0 && date(v.atMs, zone).let { d -> !d.isBefore(a) && d.isBefore(b) }
+        val inRange = viewings.filter { inside(it, from, untilExclusive) }
+        val length = java.time.temporal.ChronoUnit.DAYS.between(from, untilExclusive)
+        val before = viewings.filter { inside(it, from.minusDays(length), from) }.sumOf { it.watchedMs }.takeIf { it > 0 }
+
+        val topTitles = inRange.groupBy { it.contentId }
+            .map { (id, vs) -> WrappedTitle(id, vs.sumOf { it.watchedMs }, vs.map { it.profileIndex }.distinct().size) }
+            .sortedByDescending { it.ms }.take(3)
+
+        val personas = inRange.groupBy { it.profileIndex }.map { (p, vs) ->
+            val kind = personality(vs, zone)
+            val n = vs.size.coerceAtLeast(1)
+            val pct = { count: Int -> "${count * 100 / n}%" }
+            val stat = when (kind) {
+                Personality.BINGER -> {
+                    val sittings = vs.filter { it.series }.groupBy { it.contentId to date(it.atMs, zone) }.values.filter { it.size >= 2 }
+                    val avg = if (sittings.isEmpty()) 0.0 else sittings.sumOf { it.size }.toDouble() / sittings.size
+                    "An average of ${"%.1f".format(avg)} episodes in a row."
+                }
+                Personality.NIGHT_OWL -> "${pct(vs.count { hour(it.atMs, zone) >= 22 || hour(it.atMs, zone) < 4 })} of their watching happened after 10pm."
+                Personality.MOVIE_BUFF -> "${vs.count { !it.series }} films, more than anyone else's share."
+                Personality.SAMPLER -> "${vs.map { it.contentId }.distinct().size} different titles tried."
+                Personality.WEEKENDER -> "${pct(vs.count { date(it.atMs, zone).dayOfWeek.value >= 6 })} of their watching was at the weekend."
+                Personality.FINISHER -> "Finished ${pct(vs.count { it.completed })} of what they started."
+                else -> "${vs.map { it.contentId }.distinct().size} titles, nice and relaxed."
+            }
+            WrappedPersona(p, kind, stat)
+        }.sortedByDescending { pp -> inRange.filter { it.profileIndex == pp.profileIndex }.sumOf { it.watchedMs } }
+
+        val people = inRange.map { it.profileIndex }.distinct()
+        val quiz = if (people.size < 2) null else {
+            inRange.flatMap { v -> titles[v.contentId]?.genres.orEmpty().map { g -> g to v } }
+                .groupBy({ it.first }, { it.second })
+                .mapNotNull { (genre, vs) ->
+                    val counts = people.associateWith { p -> vs.filter { it.profileIndex == p }.map { it.contentId to it.episode }.distinct().size }
+                    val sorted = counts.entries.sortedByDescending { it.value }
+                    val margin = sorted[0].value - sorted[1].value
+                    if (sorted[0].value >= 2 && margin > 0) Triple(genre, sorted[0].key, counts) to margin else null
+                }
+                .maxByOrNull { it.second }?.first?.let { (g, a, c) -> WrappedQuiz(g, a, c) }
+        }
+
+        val heat = List(7) { MutableList(6) { 0L } }
+        val slotWeeks = mutableMapOf<Pair<Int, Int>, MutableSet<Long>>()
+        inRange.forEach { v ->
+            val t = Instant.ofEpochMilli(v.atMs).atZone(zone)
+            val b = band(t.hour)
+            // After midnight still belongs to the evening before.
+            val day = if (b == 5 && t.hour < 5) t.toLocalDate().minusDays(1) else t.toLocalDate()
+            val d = day.dayOfWeek.value - 1
+            heat[d][b] += v.watchedMs
+            slotWeeks.getOrPut(d to b) { mutableSetOf() }.add(day.toEpochDay() / 7)
+        }
+        val peak = (0 until 7).flatMap { d -> (0 until 6).map { b -> d to b } }.maxByOrNull { (d, b) -> heat[d][b] }?.takeIf { (d, b) -> heat[d][b] > 0 }
+        val latest = inRange.maxByOrNull { nightMinutes(it.atMs, zone) }?.let { it.profileIndex to it.atMs }
+        val earliest = inRange.filter { hour(it.atMs, zone) in 5..11 }.minByOrNull { nightMinutes(it.atMs, zone) }?.let { it.profileIndex to it.atMs }
+
+        val awards = buildList {
+            abandoned(viewings, nowMs).filter { a -> inRange.any { it.profileIndex == a.profileIndex && it.contentId == a.contentId } }
+                .groupBy { it.profileIndex }.maxByOrNull { it.value.size }
+                ?.let { (p, list) -> add(WrappedAward("quitter", "Most likely to start something and never finish", p, "${list.size} left unfinished")) }
+            inRange.filter { hour(it.atMs, zone) in 0..4 }.groupBy { it.profileIndex }.maxByOrNull { it.value.size }
+                ?.takeIf { it.value.size >= 2 }
+                ?.let { (p, list) -> add(WrappedAward("late", "“Just one more episode” champion", p, "${list.size} after midnight")) }
+            reactionsSent.filterValues { it > 0 }.maxByOrNull { it.value }
+                ?.let { (p, n) -> add(WrappedAward("reactions", "Most reactions sent", p, "$n reaction${if (n == 1) "" else "s"}")) }
+            inRange.filter { !it.series && it.completed }.groupBy { it.profileIndex }.maxByOrNull { it.value.size }
+                ?.takeIf { it.value.size >= 2 }
+                ?.let { (p, list) -> add(WrappedAward("films", "Film fanatic", p, "${list.size} films finished")) }
+            ratings.filter { r -> date(r.at, zone).let { !it.isBefore(from) && it.isBefore(untilExclusive) } }
+                .groupBy { it.profileIndex }.mapValues { (_, rs) -> rs.groupBy { it.contentId }.map { it.value.maxBy { r -> r.at }.stars } }
+                .filterValues { it.size >= 3 }.minByOrNull { it.value.average() }
+                ?.let { (p, stars) -> add(WrappedAward("critic", "Toughest critic", p, "average ${"%.1f".format(stars.average())} stars")) }
+        }
+
+        return WrappedPlus(
+            previousMs = before,
+            topTitles = topTitles,
+            personas = personas,
+            quiz = quiz,
+            heat = heat,
+            peak = peak?.let { (d, b) -> (d + 1) to b },
+            peakWeeks = peak?.let { slotWeeks[it]?.size } ?: 0,
+            latest = latest,
+            earliest = earliest,
+            awards = awards,
         )
     }
 }

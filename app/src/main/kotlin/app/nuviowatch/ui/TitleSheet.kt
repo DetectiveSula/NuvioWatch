@@ -187,7 +187,7 @@ fun Modifier.capturable(handle: ShareHandle): Modifier = drawWithContent {
 
 /** A share button that sends whatever [handle] has drawn as a PNG. */
 @Composable
-fun ShareButton(handle: ShareHandle, label: String = "Share", text: String = "From Nuvio Watch") {
+fun ShareButton(handle: ShareHandle, label: String = "Share", text: String = "From Nuvio Watch", color: Color = Color.White) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     TextButton(onClick = {
@@ -195,7 +195,7 @@ fun ShareButton(handle: ShareHandle, label: String = "Share", text: String = "Fr
             val bitmap = handle.layer.toImageBitmap().asAndroidBitmap()
             shareBitmap(context, bitmap, text)
         }
-    }) { Text("↗ $label", color = Color.White) }
+    }) { Text("↗ $label", color = color, fontWeight = FontWeight.SemiBold) }
 }
 
 private suspend fun shareBitmap(context: Context, bitmap: Bitmap, text: String) {
