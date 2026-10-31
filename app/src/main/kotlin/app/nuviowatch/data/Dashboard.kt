@@ -15,10 +15,10 @@ import java.time.LocalDate
 
 /** The summary phones upload for the web dashboard (encrypted before it leaves the phone). */
 object Dashboard {
-    fun build(snapshot: Snapshot, titles: Map<String, TitleInfo>, viewings: List<Viewing>, liveTime: Map<Int, Long>, nowMs: Long): String {
+    fun build(snapshot: Snapshot, titles: Map<String, TitleInfo>, viewings: List<Viewing>, liveTime: Map<Int, Long>, nowMs: Long, activeDays: Map<Int, Set<LocalDate>> = emptyMap()): String {
         val indexes = snapshot.profiles.map { it.index }
-        val board = Fun.leaderboard(viewings, indexes, nowMs)
-        val champion = Fun.champion(viewings, indexes, nowMs)
+        val board = Fun.leaderboard(viewings, indexes, nowMs, activeDays = activeDays)
+        val champion = Fun.champion(viewings, indexes, nowMs, activeDays = activeDays)
         val month = LocalDate.now().withDayOfMonth(1)
         val wrapped = Fun.wrapped(viewings, titles, month, month.plusMonths(1), month.month.name.lowercase().replaceFirstChar { it.uppercase() })
         val stats30 = StatsCalculator.compute(viewings, titles, nowMs, sinceMs = nowMs - 30 * 86_400_000L)
@@ -33,7 +33,7 @@ object Dashboard {
                         put("name", p.name)
                         put("color", p.avatarColorHex)
                         p.avatarUrl?.let { put("avatar", it) }
-                        put("streak", Fun.streaks(mine, nowMs).first)
+                        put("streak", Fun.streaks(mine, nowMs, extraDays = activeDays[p.index].orEmpty()).first)
                         put("personality", Fun.personality(mine).title)
                         put("badges", Fun.badges(mine, titles, nowMs).count { it.earned })
                         liveTime[p.index]?.let { put("liveWeekMs", it) }

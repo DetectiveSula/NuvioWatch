@@ -138,7 +138,10 @@ object Nudges {
         val today = LocalDate.now().toString()
         if (prefs.lastSent("streak") == today || LocalTime.now().hour < 18) return
         val name = snapshot.profiles.firstOrNull { it.index == me }?.name ?: return
-        val streak = Fun.streakAtRisk(viewings(snapshot, context).filter { it.profileIndex == me }, System.currentTimeMillis()) ?: return
+        val streak = Fun.streakAtRisk(
+            viewings(snapshot, context).filter { it.profileIndex == me }, System.currentTimeMillis(),
+            extraDays = context.graph.prefs.activeDays[me].orEmpty(),
+        ) ?: return
         Notifier.showAnnouncement(context, "🔥 $name, your $streak-day streak ends at midnight", "Watch something tonight to keep it going.", 52)
         prefs.setLastSent("streak", today)
     }

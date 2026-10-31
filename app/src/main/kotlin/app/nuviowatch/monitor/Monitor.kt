@@ -67,6 +67,9 @@ object Monitor {
                 if (events.isEmpty()) continue
 
                 val upserts = events.filter { it.isUpsert }
+                upserts.map { normalizeEpochMs(it.lastWatched) }.filter { it > 0 }
+                    .map { java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }
+                    .distinct().forEach { prefs.markActive(profile.index, it) }
                 upserts.maxByOrNull { normalizeEpochMs(it.lastWatched) }?.toEntry()?.let { latest ->
                     if (latest.lastWatchedMs >= (live[profile.index]?.lastWatchedMs ?: 0)) live[profile.index] = latest
                 }

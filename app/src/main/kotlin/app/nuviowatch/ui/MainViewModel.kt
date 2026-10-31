@@ -131,13 +131,18 @@ data class UiState(
     val social: SocialState = SocialState(),
     /** Every device that has reported, newest first, including idle ones. */
     val devices: List<LiveEvent> = emptyList(),
+    /** Days each profile watched something, seen live or from Nuvio sync, for streaks. */
+    val activeDays: Map<Int, Set<java.time.LocalDate>> = emptyMap(),
 ) {
     fun stats(profileIndex: Int?, range: StatsRange = StatsRange.MONTH): Stats = StatsCalculator.compute(
         viewings.filter { profileIndex == null || it.profileIndex == profileIndex },
         titles,
         clock,
         sinceMs = range.days?.let { clock - it * 86_400_000L },
+        extraActiveDays = if (profileIndex == null) activeDays.values.flatten().toSet() else activeDays[profileIndex].orEmpty(),
     )
+
+    fun activeDays(profileIndex: Int): Set<java.time.LocalDate> = activeDays[profileIndex].orEmpty()
 
     fun profile(index: Int) = snapshot.profiles.firstOrNull { it.index == index }
 
@@ -145,6 +150,7 @@ data class UiState(
 }
 
 private data class Local(
+    val activeDays: Map<Int, Set<java.time.LocalDate>> = emptyMap(),
     val liveTime: Map<Int, Long> = emptyMap(),
     val update: UpdateInfo? = null,
     val updateMessage: String? = null,
@@ -212,6 +218,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             episodes = local.episodes,
             social = local.social,
             devices = local.liveDevices.values.sortedByDescending { it.at },
+            activeDays = local.activeDays,
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
@@ -234,6 +241,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 local.update {
                     it.copy(
                         liveDevices = prefs.liveDevices,
+                        activeDays = prefs.activeDays,
                         device = deviceSettings(),
                         statuses = statuses(),
                         social = it.social.copy(
@@ -356,7 +364,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         local.update { it.copy(liveTime = liveTime) }
         val viewings = state.value.viewings
-        runCatching { db.saveDashboard(Dashboard.build(snapshot, titles, viewings, liveTime, now)) }
+        runCatching { db.saveDashboard(Dashboard.build(snapshot, titles, viewings, liveTime, now, prefs.activeDays)) }
             .onFailure { prefs.setStatus("database", "Couldn't save dashboard: ${it.message}") }
     }
 

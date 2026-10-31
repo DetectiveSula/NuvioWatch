@@ -108,15 +108,19 @@ object StatsCalculator {
         zone: ZoneId = ZoneId.systemDefault(),
         weeks: Int = 5,
         sinceMs: Long? = null,
+        /** Days known to have had some watching that the viewings may not show (from live playback and sync). */
+        extraActiveDays: Set<LocalDate> = emptySet(),
     ): Stats {
-        if (viewings.isEmpty()) return Stats.EMPTY
+        if (viewings.isEmpty() && extraActiveDays.isEmpty()) return Stats.EMPTY
         fun dateOf(ms: Long) = Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
         val today = dateOf(nowMs)
         val firstDay = today.minusDays(today.dayOfWeek.value - 1L).minusWeeks(weeks - 1L)
 
         val perDay = mutableMapOf<LocalDate, Long>()
         for (v in viewings) if (v.atMs > 0) perDay.merge(dateOf(v.atMs), v.watchedMs / 60_000, Long::plus)
-        val activeDays = perDay.filterValues { it > 0 }.keys.sorted()
+        // Any watching at all counts towards a streak, even under a minute.
+        val activeSet = viewings.filter { it.atMs > 0 && it.watchedMs > 0 }.map { dateOf(it.atMs) }.toSet() + extraActiveDays
+        val activeDays = activeSet.filter { !it.isAfter(today) }.sorted()
         var longest = 0
         var run = 0
         var previous: LocalDate? = null
@@ -126,8 +130,8 @@ object StatsCalculator {
             previous = day
         }
         var current = 0
-        var cursor = if (today in perDay.keys && perDay[today]!! > 0) today else today.minusDays(1)
-        while ((perDay[cursor] ?: 0) > 0) {
+        var cursor = if (today in activeSet) today else today.minusDays(1)
+        while (cursor in activeSet) {
             current++
             cursor = cursor.minusDays(1)
         }
@@ -155,7 +159,7 @@ object StatsCalculator {
             days = generateSequence(firstDay) { it.plusDays(1) }.takeWhile { !it.isAfter(today) }
                 .map { DayTotal(it, perDay[it] ?: 0) }.toList(),
             hours = perHour.toList(),
-            lastActivityMs = viewings.maxOf { it.atMs }.takeIf { it > 0 },
+            lastActivityMs = viewings.maxOfOrNull { it.atMs }?.takeIf { it > 0 },
             perProfile = inRange.groupBy { it.profileIndex }.mapValues { (_, vs) -> vs.sumOf { it.watchedMs } },
             longestStreak = longest,
             currentStreak = current,

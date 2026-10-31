@@ -28,6 +28,11 @@ object LiveReceiver {
         restore(context)
         val change = tracker.apply(event)
         val finished = runs.apply(event)
+        // Only devices set to a person (Settings > This device), so a guess never gives someone a streak.
+        val who = event.profileIndex
+        if (event.state == PlayState.PLAYING && who != null && !event.deviceId.startsWith("test-")) {
+            prefs.markActive(who, java.time.Instant.ofEpochMilli(event.at).atZone(java.time.ZoneId.systemDefault()).toLocalDate())
+        }
         prefs.liveDevices = tracker.states
         prefs.liveRuns = runs.states
         prefs.liveSince = id

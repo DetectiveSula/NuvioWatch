@@ -152,8 +152,8 @@ object Fun {
     private fun date(ms: Long, zone: ZoneId) = Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
     private fun hour(ms: Long, zone: ZoneId) = Instant.ofEpochMilli(ms).atZone(zone).hour
 
-    fun streaks(viewings: List<Viewing>, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): Pair<Int, Int> {
-        val stats = StatsCalculator.compute(viewings, emptyMap(), nowMs, zone)
+    fun streaks(viewings: List<Viewing>, nowMs: Long, zone: ZoneId = ZoneId.systemDefault(), extraDays: Set<LocalDate> = emptySet()): Pair<Int, Int> {
+        val stats = StatsCalculator.compute(viewings, emptyMap(), nowMs, zone, extraActiveDays = extraDays)
         return stats.currentStreak to stats.longestStreak
     }
 
@@ -209,6 +209,8 @@ object Fun {
         zone: ZoneId = ZoneId.systemDefault(),
         weeksAgo: Long = 0,
         bonus: Map<Int, Int> = emptyMap(),
+        /** Days each profile is known to have watched something (for streaks). */
+        activeDays: Map<Int, Set<LocalDate>> = emptyMap(),
     ): List<LeaderboardEntry> {
         val start = weekStart(nowMs, zone).minusWeeks(weeksAgo)
         val from = start.toInstant().toEpochMilli()
@@ -220,7 +222,8 @@ object Fun {
             val watched = week.sumOf { it.watchedMs }
             val finishedEpisodes = week.count { it.series && it.completed }
             val finishedFilms = week.count { !it.series && it.completed }
-            val streak = streaks(mine.filter { it.atMs <= end }, end, zone).first
+            val extra = activeDays[index].orEmpty().filter { !it.isAfter(date(end, zone)) }.toSet()
+            val streak = streaks(mine.filter { it.atMs <= end }, end, zone, extra).first
             LeaderboardEntry(
                 profileIndex = index,
                 points = (watched / 600_000).toInt() + finishedEpisodes * 3 + finishedFilms * 10 + streak * 5 + (bonus[index] ?: 0),
@@ -232,8 +235,8 @@ object Fun {
     }
 
     /** Last week's winner, who wears the crown this week (null if nobody watched). */
-    fun champion(viewings: List<Viewing>, profiles: List<Int>, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): Int? =
-        leaderboard(viewings, profiles, nowMs, zone, weeksAgo = 1).firstOrNull()?.takeIf { it.points > 0 }?.profileIndex
+    fun champion(viewings: List<Viewing>, profiles: List<Int>, nowMs: Long, zone: ZoneId = ZoneId.systemDefault(), activeDays: Map<Int, Set<LocalDate>> = emptyMap()): Int? =
+        leaderboard(viewings, profiles, nowMs, zone, weeksAgo = 1, activeDays = activeDays).firstOrNull()?.takeIf { it.points > 0 }?.profileIndex
 
     // ------------------------------------------------------------ Personality
 
@@ -480,10 +483,10 @@ object Fun {
      * The streak someone would lose at midnight: they watched up to yesterday
      * (a streak of 2+ days) but nothing yet today. Null if nothing's at risk.
      */
-    fun streakAtRisk(viewings: List<Viewing>, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): Int? {
+    fun streakAtRisk(viewings: List<Viewing>, nowMs: Long, zone: ZoneId = ZoneId.systemDefault(), extraDays: Set<LocalDate> = emptySet()): Int? {
         val today = date(nowMs, zone)
-        if (viewings.any { it.atMs > 0 && it.watchedMs > 0 && date(it.atMs, zone) == today }) return null
-        val streak = streaks(viewings, nowMs, zone).first
+        if (today in extraDays || viewings.any { it.atMs > 0 && it.watchedMs > 0 && date(it.atMs, zone) == today }) return null
+        val streak = streaks(viewings, nowMs, zone, extraDays).first
         return streak.takeIf { it >= 2 }
     }
 

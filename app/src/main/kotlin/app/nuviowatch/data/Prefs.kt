@@ -147,6 +147,22 @@ class Prefs(context: Context) : SessionStore {
     fun liveCoveredAt(profile: Int): Long = prefs.getLong("live_covered_$profile", 0)
     fun setLiveCoveredAt(profile: Int, at: Long) = prefs.edit { putLong("live_covered_$profile", at) }
 
+    /** Days each profile watched something, seen live or from Nuvio sync, for streaks. */
+    val activeDays: Map<Int, Set<java.time.LocalDate>>
+        get() = prefs.getString("active_days", null)
+            ?.let { runCatching { json.decodeFromString<Map<Int, List<String>>>(it) }.getOrNull() }
+            .orEmpty()
+            .mapValues { (_, days) -> days.mapNotNull { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }.toSet() }
+
+    @Synchronized
+    fun markActive(profile: Int, day: java.time.LocalDate) {
+        val all = activeDays
+        if (all[profile]?.contains(day) == true) return
+        val keepFrom = java.time.LocalDate.now().minusDays(400)
+        val updated = all + (profile to ((all[profile].orEmpty() + day).filter { it.isAfter(keepFrom) }.toSet()))
+        prefs.edit { putString("active_days", json.encodeToString(updated.mapValues { (_, d) -> d.map { it.toString() }.sorted() })) }
+    }
+
     /** Last relay message read, so a reconnect picks up where it left off. */
     var liveSince: String?
         get() = prefs.getString("live_since", null)
