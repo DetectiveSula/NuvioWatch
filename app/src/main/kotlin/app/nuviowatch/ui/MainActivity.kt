@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
@@ -97,6 +98,9 @@ class MainActivity : ComponentActivity() {
 
 private const val SETTINGS_TAB = 4
 
+/** Widest the screens get on tablets and TVs. */
+private val MAX_CONTENT_WIDTH = 760.dp
+
 private val tabs = listOf(
     NavItem("Now", Icons.Filled.PlayArrow),
     NavItem("Family", Icons.Filled.Favorite),
@@ -123,7 +127,8 @@ private fun MainScreenContent(state: UiState, vm: MainViewModel) {
     val context = LocalContext.current
     val isTv = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) }
 
-    val content: @Composable (Int) -> Unit = { current ->
+    // Tablets and TVs: keep the phone layout at a comfortable width in the middle, instead of stretching it.
+    val screen: @Composable (Int) -> Unit = { current ->
         if (current == SETTINGS_TAB) {
             SettingsScreen(state, vm)
         } else {
@@ -135,6 +140,12 @@ private fun MainScreenContent(state: UiState, vm: MainViewModel) {
                     else -> HistoryScreen(state)
                 }
             }
+        }
+    }
+
+    val content: @Composable (Int) -> Unit = { current ->
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+            Box(Modifier.widthIn(max = MAX_CONTENT_WIDTH).fillMaxSize()) { screen(current) }
         }
     }
 
@@ -159,7 +170,7 @@ private fun MainScreenContent(state: UiState, vm: MainViewModel) {
         } else {
             Crossfade(targetState = tab, label = "tab") { content(it) }
         }
-        if (!fullScreen) FloatingNav(tabs, tab, { tab = it }, Modifier.align(Alignment.BottomCenter))
+        if (!fullScreen) FloatingNav(tabs, tab, { tab = it }, Modifier.align(Alignment.BottomCenter).widthIn(max = 560.dp))
     }
 }
 
