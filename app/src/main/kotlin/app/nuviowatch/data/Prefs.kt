@@ -158,6 +158,21 @@ class Prefs(context: Context) : SessionStore {
             .orEmpty()
             .mapValues { (_, days) -> days.mapNotNull { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }.toSet() }
 
+    /** Missed days a streak freeze covered, recorded when they happened. */
+    val freezeDays: Map<Int, Set<java.time.LocalDate>>
+        get() = prefs.getString("freeze_days", null)
+            ?.let { runCatching { json.decodeFromString<Map<Int, List<String>>>(it) }.getOrNull() }
+            .orEmpty()
+            .mapValues { (_, days) -> days.mapNotNull { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }.toSet() }
+
+    @Synchronized
+    fun markFreeze(profile: Int, day: java.time.LocalDate) {
+        val all = freezeDays
+        if (all[profile]?.contains(day) == true) return
+        val updated = all + (profile to (all[profile].orEmpty() + day))
+        prefs.edit { putString("freeze_days", json.encodeToString(updated.mapValues { (_, d) -> d.map { it.toString() }.sorted() })) }
+    }
+
     @Synchronized
     fun markActive(profile: Int, day: java.time.LocalDate) {
         val all = activeDays

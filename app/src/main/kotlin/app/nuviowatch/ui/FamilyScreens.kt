@@ -114,14 +114,14 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
     val bonus = remember(state.viewings, state.titles, state.episodes, state.clock / 3_600_000) {
         Fun.challengeBonus(state.viewings, indexes, state.titles, state.episodes, state.clock)
     }
-    val board = remember(state.viewings, bonus, state.activeDays, state.clock / 600_000) {
-        Fun.leaderboard(state.viewings, indexes, state.clock, bonus = bonus, activeDays = state.activeDays)
+    val board = remember(state.viewings, bonus, state.activeDays, state.freezeDays, state.clock / 600_000) {
+        Fun.leaderboard(state.viewings, indexes, state.clock, bonus = bonus, activeDays = state.activeDays, freezeDays = state.freezeDays)
     }
     val boardShare = rememberShareHandle()
-    val champion = remember(state.viewings, state.activeDays, state.clock / 3_600_000) { Fun.champion(state.viewings, indexes, state.clock, activeDays = state.activeDays) }
+    val champion = remember(state.viewings, state.activeDays, state.clock / 3_600_000) { Fun.champion(state.viewings, indexes, state.clock, activeDays = state.activeDays, freezeDays = state.freezeDays) }
     // Recomputed every minute so a streak appears as soon as someone watches and goes after a missed day.
-    val streaks = remember(state.viewings, state.activeDays, state.clock / 60_000) {
-        indexes.associateWith { i -> Fun.streaks(state.viewings.filter { it.profileIndex == i }, state.clock, extraDays = state.activeDays(i)).first }
+    val streaks = remember(state.viewings, state.activeDays, state.freezeDays, state.clock / 60_000) {
+        indexes.associateWith { i -> Fun.streaks(state.viewings.filter { it.profileIndex == i }, state.clock, extraDays = state.activeDays(i), freezes = state.freezes(i)).first }
     }
     var pickFor by rememberSaveable { mutableStateOf(profiles.firstOrNull()?.index) }
     val names = profiles.associate { it.index to it.name }
@@ -540,13 +540,13 @@ private fun NewPrediction(state: UiState, onCreate: (Int, PredictionKind, String
 private fun ProfilePage(state: UiState, index: Int, onBack: () -> Unit) {
     val profile = state.profile(index) ?: return onBack()
     val mine = remember(state.viewings, index) { state.viewings.filter { it.profileIndex == index } }
-    val stats = remember(mine, state.titles, state.activeDays, state.clock / 60_000) {
-        StatsCalculator.compute(mine, state.titles, state.clock, extraActiveDays = state.activeDays(index))
+    val stats = remember(mine, state.titles, state.activeDays, state.freezeDays, state.clock / 60_000) {
+        StatsCalculator.compute(mine, state.titles, state.clock, extraActiveDays = state.activeDays(index), freezeDays = state.freezes(index))
     }
     val personality = remember(mine) { Fun.personality(mine) }
     val badges = remember(mine, state.titles, state.clock / 3_600_000) { Fun.badges(mine, state.titles, state.clock) }
     val champion = remember(state.viewings, state.clock / 3_600_000) {
-        Fun.champion(state.viewings, state.snapshot.profiles.map { it.index }, state.clock, activeDays = state.activeDays)
+        Fun.champion(state.viewings, state.snapshot.profiles.map { it.index }, state.clock, activeDays = state.activeDays, freezeDays = state.freezeDays)
     }
     val abandoned = remember(mine, state.clock / 3_600_000) { Fun.abandoned(mine, state.clock).take(5) }
     val color = visibleOnDark(parseColor(profile.avatarColorHex))

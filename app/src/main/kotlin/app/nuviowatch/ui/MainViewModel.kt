@@ -135,6 +135,8 @@ data class UiState(
     val activeDays: Map<Int, Set<java.time.LocalDate>> = emptyMap(),
     /** A Wrapped story to open (months ago), from a notification. */
     val pendingWrapped: Int? = null,
+    /** Missed days covered by streak freezes. */
+    val freezeDays: Map<Int, Set<java.time.LocalDate>> = emptyMap(),
 ) {
     fun stats(profileIndex: Int?, range: StatsRange = StatsRange.MONTH): Stats = StatsCalculator.compute(
         viewings.filter { profileIndex == null || it.profileIndex == profileIndex },
@@ -142,7 +144,10 @@ data class UiState(
         clock,
         sinceMs = range.days?.let { clock - it * 86_400_000L },
         extraActiveDays = if (profileIndex == null) activeDays.values.flatten().toSet() else activeDays[profileIndex].orEmpty(),
+        freezeDays = if (profileIndex == null) emptySet() else freezeDays[profileIndex].orEmpty(),
     )
+
+    fun freezes(profileIndex: Int): Set<java.time.LocalDate> = freezeDays[profileIndex].orEmpty()
 
     fun activeDays(profileIndex: Int): Set<java.time.LocalDate> = activeDays[profileIndex].orEmpty()
 
@@ -152,6 +157,7 @@ data class UiState(
 }
 
 private data class Local(
+    val freezeDays: Map<Int, Set<java.time.LocalDate>> = emptyMap(),
     val pendingWrapped: Int? = null,
     val activeDays: Map<Int, Set<java.time.LocalDate>> = emptyMap(),
     val liveTime: Map<Int, Long> = emptyMap(),
@@ -223,6 +229,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             devices = local.liveDevices.values.sortedByDescending { it.at },
             activeDays = local.activeDays,
             pendingWrapped = local.pendingWrapped,
+            freezeDays = local.freezeDays,
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
@@ -246,6 +253,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     it.copy(
                         liveDevices = prefs.liveDevices,
                         activeDays = prefs.activeDays,
+                        freezeDays = prefs.freezeDays,
                         device = deviceSettings(),
                         statuses = statuses(),
                         social = it.social.copy(
@@ -368,7 +376,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         local.update { it.copy(liveTime = liveTime) }
         val viewings = state.value.viewings
-        runCatching { db.saveDashboard(Dashboard.build(snapshot, titles, viewings, liveTime, now, prefs.activeDays)) }
+        runCatching { db.saveDashboard(Dashboard.build(snapshot, titles, viewings, liveTime, now, prefs.activeDays, prefs.freezeDays)) }
             .onFailure { prefs.setStatus("database", "Couldn't save dashboard: ${it.message}") }
     }
 

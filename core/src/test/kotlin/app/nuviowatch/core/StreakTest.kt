@@ -47,19 +47,22 @@ class StreakTest {
         val now = at("2026-10-31", 21)
         // Watched 20–24, missed 25, watched 26–28, missed 29, watched 30–31: second miss is within a week, so it ends there.
         val days = listOf("2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-30", "2026-10-31")
-        val run = Fun.streakRun(days.map { v(it) }, now, zone)
+        // The 29th was recorded as a freeze when it happened; the 25th was within a week of it, so not.
+        val run = Fun.streakRun(days.map { v(it) }, now, zone, freezes = setOf(LocalDate.parse("2026-10-29")))
         assertEquals(5, run.days) // 26, 27, 28, 30, 31
         assertEquals(LocalDate.parse("2026-10-26"), run.since)
         // Misses eight days apart are both forgiven
         val spaced = listOf("2026-10-20", "2026-10-22", "2026-10-23", "2026-10-24", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-31")
-        assertEquals(10, Fun.streaks(spaced.map { v(it) }, now, zone).first)
+        assertEquals(10, Fun.streaks(spaced.map { v(it) }, now, zone, freezes = setOf(LocalDate.parse("2026-10-21"), LocalDate.parse("2026-10-30"))).first)
+        // Gaps from before freezes were recorded don't join streaks up
+        assertEquals(9, Fun.streaks(spaced.map { v(it) }, now, zone).first)
     }
 
     @Test
     fun freezeCoversTodayOnlyIfUnused() {
         val now = at("2026-10-31", 21)
         assertTrue(Fun.freezeCoversToday(listOf(v("2026-10-29"), v("2026-10-30")), now, zone))
-        assertFalse(Fun.freezeCoversToday(listOf(v("2026-10-27"), v("2026-10-28"), v("2026-10-30")), now, zone))
+        assertFalse(Fun.freezeCoversToday(listOf(v("2026-10-27"), v("2026-10-28"), v("2026-10-30")), now, zone, freezes = setOf(LocalDate.parse("2026-10-29"))))
     }
 
     @Test
@@ -67,5 +70,14 @@ class StreakTest {
         assertNull(Fun.streakMilestone(6))
         assertEquals(7, Fun.streakMilestone(9))
         assertEquals(30, Fun.streakMilestone(30))
+    }
+
+    @Test
+    fun oldGapsStayBroken() {
+        // Watched 27, missed 28 (long ago, no freeze recorded), watched 29, 30, 31.
+        val now = at("2026-10-31", 21)
+        val run = Fun.streakRun(listOf(v("2026-10-27"), v("2026-10-29"), v("2026-10-30"), v("2026-10-31")), now, zone)
+        assertEquals(3, run.days)
+        assertNull(run.freezeOn)
     }
 }

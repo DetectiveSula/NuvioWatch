@@ -114,6 +114,8 @@ object StatsCalculator {
         sinceMs: Long? = null,
         /** Days known to have had some watching that the viewings may not show (from live playback and sync). */
         extraActiveDays: Set<LocalDate> = emptySet(),
+        /** Missed days already covered by a streak freeze (recorded when they happened). */
+        freezeDays: Set<LocalDate> = emptySet(),
     ): Stats {
         if (viewings.isEmpty() && extraActiveDays.isEmpty()) return Stats.EMPTY
         fun dateOf(ms: Long) = Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
@@ -125,8 +127,8 @@ object StatsCalculator {
         // Any watching at all counts towards a streak, even under a minute.
         val activeSet = viewings.filter { it.atMs > 0 && it.watchedMs > 0 }.map { dateOf(it.atMs) }.toSet() + extraActiveDays
         val activeDays = activeSet.filter { !it.isAfter(today) }.sorted()
-        val longest = Streaks.longest(activeDays)
-        val currentRun = Streaks.current(activeSet, today)
+        val longest = Streaks.longest(activeDays, freezeDays)
+        val currentRun = Streaks.current(activeSet, today, freezeDays)
         val current = currentRun.days
 
         val inRange = if (sinceMs == null) viewings else viewings.filter { it.atMs >= sinceMs }
@@ -167,16 +169,24 @@ data class StreakRun(val days: Int, val since: LocalDate?, val freezeOn: LocalDa
 
 /**
  * Streaks with a weekly freeze: one missed day is forgiven if no other day was
- * forgiven in the week before it. Forgiven days keep a streak alive but don't add to it.
+ * forgiven within a week of it. Forgiven days keep a streak alive but don't add to it.
+ *
+ * Only freezes recorded when they happened ([freezes]) bridge older gaps, plus
+ * yesterday, which can still be covered now. So turning freezes on never joins up
+ * streaks that had already ended.
  */
 object Streaks {
     const val FREEZE_EVERY_DAYS = 7L
 
-    fun current(days: Set<LocalDate>, today: LocalDate): StreakRun {
-        var cursor = if (today in days) today else today.minusDays(1)
+    private fun ready(day: LocalDate, freezes: Set<LocalDate>) =
+        freezes.none { it != day && kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(it, day)) < FREEZE_EVERY_DAYS }
+
+    fun current(days: Set<LocalDate>, today: LocalDate, freezes: Set<LocalDate> = emptySet()): StreakRun {
+        val yesterday = today.minusDays(1)
+        var cursor = if (today in days) today else yesterday
         var count = 0
         var since: LocalDate? = null
-        var lastFreeze: LocalDate? = null
+        var freezeOn: LocalDate? = null
         while (true) {
             if (cursor in days) {
                 count++
@@ -185,35 +195,27 @@ object Streaks {
                 continue
             }
             val before = cursor.minusDays(1)
-            val freezeReady = lastFreeze == null || java.time.temporal.ChronoUnit.DAYS.between(cursor, lastFreeze) >= FREEZE_EVERY_DAYS
-            if (before in days && freezeReady) {
-                lastFreeze = cursor
+            val covered = cursor in freezes || (cursor == yesterday && ready(cursor, freezes))
+            if (before in days && covered) {
+                if (freezeOn == null) freezeOn = cursor
                 cursor = before
                 continue
             }
             break
         }
-        return StreakRun(count, since, lastFreeze.takeIf { count > 0 })
+        return StreakRun(count, since, freezeOn.takeIf { count > 0 })
     }
 
-    fun longest(sortedDays: List<LocalDate>): Int {
+    fun longest(sortedDays: List<LocalDate>, freezes: Set<LocalDate> = emptySet()): Int {
         var longest = 0
         var run = 0
         var previous: LocalDate? = null
-        var lastFreeze: LocalDate? = null
         for (day in sortedDays) {
             val p = previous
             run = when {
                 p != null && p.plusDays(1) == day -> run + 1
-                p != null && p.plusDays(2) == day &&
-                    (lastFreeze == null || java.time.temporal.ChronoUnit.DAYS.between(lastFreeze, p.plusDays(1)) >= FREEZE_EVERY_DAYS) -> {
-                    lastFreeze = p.plusDays(1)
-                    run + 1
-                }
-                else -> {
-                    lastFreeze = null
-                    1
-                }
+                p != null && p.plusDays(2) == day && p.plusDays(1) in freezes -> run + 1
+                else -> 1
             }
             longest = maxOf(longest, run)
             previous = day

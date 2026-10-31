@@ -94,12 +94,15 @@ object Nudges {
         val prefs = context.graph.prefs
         val all = viewings(snapshot, context)
         val activeDays = prefs.activeDays
+        val freezeDays = prefs.freezeDays
         val now = System.currentTimeMillis()
         val seeded = prefs.isMarked("streaks-seeded")
         val yesterday = LocalDate.now().minusDays(1)
         for (p in snapshot.profiles) {
-            val run = Fun.streakRun(all.filter { it.profileIndex == p.index }, now, extraDays = activeDays[p.index].orEmpty())
+            val run = Fun.streakRun(all.filter { it.profileIndex == p.index }, now, extraDays = activeDays[p.index].orEmpty(), freezes = freezeDays[p.index].orEmpty())
             val since = run.since ?: continue
+            // Remember a freeze once it's used, so it keeps covering that day from now on.
+            run.freezeOn?.takeIf { it == yesterday }?.let { prefs.markFreeze(p.index, it) }
             Fun.streakMilestone(run.days)?.let { m ->
                 val key = "streak-ms|${p.index}|$since|$m"
                 if (!prefs.isMarked(key)) {
@@ -206,12 +209,13 @@ object Nudges {
         val today = LocalDate.now().toString()
         if (prefs.lastSent("streak") == today || LocalTime.now().hour < 18) return
         val name = snapshot.profiles.firstOrNull { it.index == me }?.name ?: return
+        val freezes = prefs.freezeDays[me].orEmpty()
         val streak = Fun.streakAtRisk(
             viewings(snapshot, context).filter { it.profileIndex == me }, System.currentTimeMillis(),
-            extraDays = context.graph.prefs.activeDays[me].orEmpty(),
+            extraDays = context.graph.prefs.activeDays[me].orEmpty(), freezes = freezes,
         ) ?: return
         val extra = context.graph.prefs.activeDays[me].orEmpty()
-        if (Fun.freezeCoversToday(viewings(snapshot, context).filter { it.profileIndex == me }, System.currentTimeMillis(), extraDays = extra)) {
+        if (Fun.freezeCoversToday(viewings(snapshot, context).filter { it.profileIndex == me }, System.currentTimeMillis(), extraDays = extra, freezes = freezes)) {
             Notifier.showAnnouncement(context, "🔥 $name, your $streak-day streak needs you", "Watch something tonight, or this week's streak freeze 🧊 gets used.", 52)
         } else {
             Notifier.showAnnouncement(context, "🔥 $name, your $streak-day streak ends at midnight", "Watch something tonight to keep it going. Your streak freeze is used up this week.", 52)
