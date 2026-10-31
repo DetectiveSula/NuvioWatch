@@ -73,6 +73,7 @@ class FunTest {
             ep(1, "show", 3, at(40, 20), done = false),
             film(1, "film", at(30, 20), done = true),
             film(1, "other", at(2, 20), done = false),
+            Viewing(2, "peek", false, null, null, "peek", 60_000, at(40, 20), false, 0.01f), // only sampled
         )
         val list = Fun.abandoned(v, now)
         assertEquals(listOf("show"), list.map { it.contentId })

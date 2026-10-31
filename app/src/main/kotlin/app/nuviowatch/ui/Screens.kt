@@ -250,6 +250,14 @@ fun NowScreen(state: UiState, vm: MainViewModel, onOpenSettings: () -> Unit) {
     }
 }
 
+/** Big for short titles, smaller for long ones so the whole name fits. */
+private fun heroTitleSize(name: String): Int = when {
+    name.length <= 16 -> 44
+    name.length <= 28 -> 38
+    name.length <= 44 -> 32
+    else -> 28
+}
+
 /** Every device in the house: what it's playing, or how long it's been idle. */
 @Composable
 private fun DeviceStrip(state: UiState) {
@@ -367,7 +375,8 @@ private fun Hero(state: UiState, hero: ProfileNow?, tint: Color) {
                     Text("${hero.profile.name.uppercase()} WATCHED · $ago", style = Eyebrow, color = TextMuted)
                 }
             }
-            Text(info?.name ?: entry.contentId, style = display(44), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            val name = info?.name ?: entry.contentId
+            Text(name, style = display(heroTitleSize(name)), maxLines = 3, overflow = TextOverflow.Ellipsis)
             listOfNotNull(episodeLabel(entry.season, entry.episode), info?.year).joinToString(" · ").takeIf { it.isNotBlank() }?.let {
                 Text(it, color = Color(0xFFD6D1E6))
             }
@@ -426,7 +435,8 @@ private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (Strin
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(live.info?.name ?: event.title, style = display(44), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            val name = live.info?.name ?: event.title
+            Text(name, style = display(heroTitleSize(name)), maxLines = 3, overflow = TextOverflow.Ellipsis)
             event.subtitle?.takeIf { it.isNotBlank() }?.let { Text(it, color = Color(0xFFD6D1E6), maxLines = 1, overflow = TextOverflow.Ellipsis) }
             if (event.durationMs > 0) {
                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -270,7 +270,8 @@ private fun SmallChoice(label: String, active: Boolean, onClick: () -> Unit) {
 /** Avatar with a streak flame and, for last week's winner, a crown. */
 @Composable
 fun StreakAvatar(profile: Profile, streak: Int, crowned: Boolean, size: androidx.compose.ui.unit.Dp) {
-    Box {
+    // The crown sits above the avatar; leave room for it so cards and rows don't clip it.
+    Box(Modifier.padding(top = if (crowned) size * 0.45f else 0.dp)) {
         ProfileAvatar(profile, size = size)
         if (streak >= 2) {
             Text(
@@ -288,7 +289,7 @@ fun StreakAvatar(profile: Profile, streak: Int, crowned: Boolean, size: androidx
             )
         }
         if (crowned) {
-            Text("👑", modifier = Modifier.align(Alignment.TopCenter).offset(y = (-size.value * 0.32f).dp), fontSize = (size.value * 0.36f).sp)
+            Text("👑", modifier = Modifier.align(Alignment.TopCenter).offset(y = (-size.value * 0.44f).dp), fontSize = (size.value * 0.32f).sp)
         }
     }
 }

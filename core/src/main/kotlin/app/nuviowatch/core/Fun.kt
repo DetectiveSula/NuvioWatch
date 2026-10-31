@@ -198,12 +198,18 @@ object Fun {
 
     // ------------------------------------------------------------ Abandoned
 
-    /** Titles left unfinished and untouched for [idleDays] or more, newest first. */
-    fun abandoned(viewings: List<Viewing>, nowMs: Long, idleDays: Long = 21): List<AbandonedTitle> =
+    /**
+     * Titles left unfinished and untouched for [idleDays] or more, newest first.
+     * Films and episodes stopped before [minFraction] were only sampled, so they don't count.
+     */
+    fun abandoned(viewings: List<Viewing>, nowMs: Long, idleDays: Long = 21, minFraction: Float = 0.10f): List<AbandonedTitle> =
         viewings.groupBy { it.profileIndex to it.contentId }.mapNotNull { (key, vs) ->
             val last = vs.maxBy { it.atMs }
             val idle = nowMs - last.atMs >= idleDays * 86_400_000L
             if (!idle || last.completed || last.atMs <= 0) return@mapNotNull null
+            // A series counts as started once any episode was finished; a film needs real progress.
+            val started = last.fraction >= minFraction || vs.any { it.series && it.completed }
+            if (!started) return@mapNotNull null
             AbandonedTitle(key.first, key.second, last.fallbackTitle, last.season, last.episode, last.fraction, last.atMs)
         }.sortedByDescending { it.lastAtMs }
 
