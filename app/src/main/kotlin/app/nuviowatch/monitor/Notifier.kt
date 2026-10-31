@@ -416,6 +416,31 @@ object Notifier {
         NotificationManagerCompat.from(context).notify(ONGOING_ID, ongoing(context))
     }
 
+    /** "Your October Wrapped is ready": opens straight into last month's story. */
+    fun showWrappedReady(context: Context, title: String, text: String) {
+        if (!canNotify(context)) return
+        val open = PendingIntent.getActivity(
+            context,
+            61,
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra(MainActivity.EXTRA_WRAPPED, 1),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = NotificationCompat.Builder(context, RECAPS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setColor(0xFF5B3FD1.toInt())
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setContentIntent(open)
+            .addAction(0, "Play it", open)
+            .build()
+        @Suppress("MissingPermission")
+        NotificationManagerCompat.from(context).notify(61, notification)
+    }
+
     private fun openApp(context: Context) = PendingIntent.getActivity(
         context,
         0,

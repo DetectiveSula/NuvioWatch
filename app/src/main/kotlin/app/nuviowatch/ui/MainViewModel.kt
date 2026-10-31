@@ -133,6 +133,8 @@ data class UiState(
     val devices: List<LiveEvent> = emptyList(),
     /** Days each profile watched something, seen live or from Nuvio sync, for streaks. */
     val activeDays: Map<Int, Set<java.time.LocalDate>> = emptyMap(),
+    /** A Wrapped story to open (months ago), from a notification. */
+    val pendingWrapped: Int? = null,
 ) {
     fun stats(profileIndex: Int?, range: StatsRange = StatsRange.MONTH): Stats = StatsCalculator.compute(
         viewings.filter { profileIndex == null || it.profileIndex == profileIndex },
@@ -150,6 +152,7 @@ data class UiState(
 }
 
 private data class Local(
+    val pendingWrapped: Int? = null,
     val activeDays: Map<Int, Set<java.time.LocalDate>> = emptyMap(),
     val liveTime: Map<Int, Long> = emptyMap(),
     val update: UpdateInfo? = null,
@@ -219,6 +222,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             social = local.social,
             devices = local.liveDevices.values.sortedByDescending { it.at },
             activeDays = local.activeDays,
+            pendingWrapped = local.pendingWrapped,
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
@@ -480,6 +484,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (newlyAnnounced.isNotEmpty()) prefs.announcedPredictions = announced + newlyAnnounced
     }
+
+    fun openWrapped(monthsAgo: Int) = local.update { it.copy(pendingWrapped = monthsAgo) }
+
+    fun wrappedOpened() = local.update { it.copy(pendingWrapped = null) }
 
     fun setAlertOwnDevice(on: Boolean) {
         prefs.alertOwnDevice = on

@@ -147,6 +147,10 @@ class Prefs(context: Context) : SessionStore {
     fun liveCoveredAt(profile: Int): Long = prefs.getLong("live_covered_$profile", 0)
     fun setLiveCoveredAt(profile: Int, at: Long) = prefs.edit { putLong("live_covered_$profile", at) }
 
+    var lastStreakCheck: Long
+        get() = prefs.getLong("last_streak_check", 0)
+        set(value) = prefs.edit { putLong("last_streak_check", value) }
+
     /** Days each profile watched something, seen live or from Nuvio sync, for streaks. */
     val activeDays: Map<Int, Set<java.time.LocalDate>>
         get() = prefs.getString("active_days", null)

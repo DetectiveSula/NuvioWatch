@@ -85,6 +85,9 @@ private sealed interface FamilyPage {
 fun FamilyScreen(state: UiState, vm: MainViewModel) {
     var personIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     var storyMonthsAgo by rememberSaveable { mutableStateOf<Int?>(null) }
+    androidx.compose.runtime.LaunchedEffect(state.pendingWrapped) {
+        state.pendingWrapped?.let { storyMonthsAgo = it; vm.wrappedOpened() }
+    }
     val page: FamilyPage = when {
         storyMonthsAgo != null -> FamilyPage.Story(storyMonthsAgo!!)
         personIndex != null -> FamilyPage.Person(personIndex!!)
@@ -180,7 +183,7 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "1 pt per 10 min watched · 3 per episode · 10 per film · 5 per streak day" +
+                    "1 pt per 10 min watched · 3 per episode · 10 per film · 5 per streak day (one missed day a week is forgiven)" +
                         (champion?.let { " · 👑 ${names[it]} won last week" } ?: ""),
                     fontSize = 11.sp,
                     color = TextMuted,

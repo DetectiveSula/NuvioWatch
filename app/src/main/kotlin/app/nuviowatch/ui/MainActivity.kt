@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) openFrom(intent)
         setContent {
             NuvioWatchTheme {
                 val state by viewModel.state.collectAsStateWithLifecycle()
@@ -68,6 +69,24 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        openFrom(intent)
+    }
+
+    /** A notification can ask to open a Wrapped story (months ago). */
+    private fun openFrom(intent: android.content.Intent?) {
+        val months = intent?.getIntExtra(EXTRA_WRAPPED, Int.MIN_VALUE) ?: return
+        if (months != Int.MIN_VALUE) {
+            viewModel.openWrapped(months)
+            intent.removeExtra(EXTRA_WRAPPED)
+        }
+    }
+
+    companion object {
+        const val EXTRA_WRAPPED = "open_wrapped"
     }
 }
 
@@ -94,6 +113,8 @@ private fun MainScreen(state: UiState, vm: MainViewModel) {
 private fun MainScreenContent(state: UiState, vm: MainViewModel) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var fullScreen by remember { mutableStateOf(false) }
+    // Opened from "Your Wrapped is ready": go to the Family tab, which plays it.
+    androidx.compose.runtime.LaunchedEffect(state.pendingWrapped) { if (state.pendingWrapped != null) tab = 1 }
     val context = LocalContext.current
     val isTv = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) }
 

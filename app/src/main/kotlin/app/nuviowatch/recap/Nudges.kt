@@ -64,6 +64,74 @@ object Nudges {
         prefs.announcedBadges = updated
     }
 
+    /** Early in a new month: last month's Family Wrapped is ready to play. */
+    private fun announceWrapped(context: Context, snapshot: Snapshot) {
+        val prefs = context.graph.prefs
+        val today = LocalDate.now()
+        if (today.dayOfMonth > 3 || LocalTime.now().hour < 9) return
+        val start = today.minusMonths(1).withDayOfMonth(1)
+        val key = start.toString().take(7)
+        if (prefs.lastSent("wrapped") == key) return
+        val label = start.month.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault())
+        val titles = context.graph.titles.titles.value
+        val w = Fun.wrapped(viewings(snapshot, context), titles, start, start.plusMonths(1), label)
+        prefs.setLastSent("wrapped", key)
+        if (w == null) return
+        val hours = w.totalMs / 3_600_000
+        val top = w.topTitle?.let { titles[it.first]?.name }
+        Notifier.showWrappedReady(
+            context,
+            "🎁 Your $label Wrapped is ready",
+            listOfNotNull("$hours hours together", top?.let { "top title: $it" }).joinToString(", ") + ". Tap to play it with the family.",
+        )
+    }
+
+    /**
+     * Streak milestones (7, 14, 30 … days) for anyone, and a note to the person whose
+     * streak was saved by its weekly freeze. The first check records quietly, like badges.
+     */
+    fun announceStreaks(context: Context, snapshot: Snapshot) {
+        val prefs = context.graph.prefs
+        val all = viewings(snapshot, context)
+        val activeDays = prefs.activeDays
+        val now = System.currentTimeMillis()
+        val seeded = prefs.isMarked("streaks-seeded")
+        val yesterday = LocalDate.now().minusDays(1)
+        for (p in snapshot.profiles) {
+            val run = Fun.streakRun(all.filter { it.profileIndex == p.index }, now, extraDays = activeDays[p.index].orEmpty())
+            val since = run.since ?: continue
+            Fun.streakMilestone(run.days)?.let { m ->
+                val key = "streak-ms|${p.index}|$since|$m"
+                if (!prefs.isMarked(key)) {
+                    if (seeded) {
+                        val text = when {
+                            m >= 100 -> "$m days in a row. Legendary."
+                            m >= 30 -> "A whole month of watching every day. Can anyone catch up?"
+                            else -> "$m days in a row of watching. Can anyone keep up?"
+                        }
+                        Notifier.showAnnouncement(context, "🔥 ${p.name} hit a $m-day streak!", text, key.hashCode())
+                    }
+                    prefs.mark(key)
+                }
+            }
+            if (run.freezeOn == yesterday && run.days >= 2 && p.index == prefs.deviceProfile) {
+                val key = "freeze|${p.index}|${run.freezeOn}"
+                if (!prefs.isMarked(key)) {
+                    if (seeded) {
+                        Notifier.showAnnouncement(
+                            context,
+                            "🧊 Streak freeze used",
+                            "You missed yesterday, but your ${run.days}-day streak is safe. Watch something today to keep it going. The next freeze is ready in a week.",
+                            key.hashCode(),
+                        )
+                    }
+                    prefs.mark(key)
+                }
+            }
+        }
+        prefs.mark("streaks-seeded")
+    }
+
     /** Completed monthly challenges, for anyone. The first check records quietly, like badges. */
     fun announceChallenges(context: Context, snapshot: Snapshot) {
         val graph = context.graph
@@ -142,7 +210,12 @@ object Nudges {
             viewings(snapshot, context).filter { it.profileIndex == me }, System.currentTimeMillis(),
             extraDays = context.graph.prefs.activeDays[me].orEmpty(),
         ) ?: return
-        Notifier.showAnnouncement(context, "🔥 $name, your $streak-day streak ends at midnight", "Watch something tonight to keep it going.", 52)
+        val extra = context.graph.prefs.activeDays[me].orEmpty()
+        if (Fun.freezeCoversToday(viewings(snapshot, context).filter { it.profileIndex == me }, System.currentTimeMillis(), extraDays = extra)) {
+            Notifier.showAnnouncement(context, "🔥 $name, your $streak-day streak needs you", "Watch something tonight, or this week's streak freeze 🧊 gets used.", 52)
+        } else {
+            Notifier.showAnnouncement(context, "🔥 $name, your $streak-day streak ends at midnight", "Watch something tonight to keep it going. Your streak freeze is used up this week.", 52)
+        }
         prefs.setLastSent("streak", today)
     }
 
@@ -152,6 +225,8 @@ object Nudges {
         val snapshot = withTimeoutOrNull(7_000) { runCatching { graph.repository.refresh() }.getOrNull() }
             ?: graph.repository.snapshot.value
         announceBadges(context, snapshot)
+        announceWrapped(context, snapshot)
+        announceStreaks(context, snapshot)
         announceChallenges(context, snapshot)
         announceNewEpisodes(context, snapshot)
         announceUpdate(context)

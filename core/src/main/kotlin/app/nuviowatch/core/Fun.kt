@@ -157,6 +157,21 @@ object Fun {
         return stats.currentStreak to stats.longestStreak
     }
 
+    /** The current streak with the day it began and any freeze it used. */
+    fun streakRun(viewings: List<Viewing>, nowMs: Long, zone: ZoneId = ZoneId.systemDefault(), extraDays: Set<LocalDate> = emptySet()): StreakRun {
+        val stats = StatsCalculator.compute(viewings, emptyMap(), nowMs, zone, extraActiveDays = extraDays)
+        return StreakRun(stats.currentStreak, stats.streakSince, stats.freezeOn)
+    }
+
+    /** True if skipping today would be covered by the weekly freeze, so the streak survives. */
+    fun freezeCoversToday(viewings: List<Viewing>, nowMs: Long, zone: ZoneId = ZoneId.systemDefault(), extraDays: Set<LocalDate> = emptySet()): Boolean =
+        streaks(viewings, nowMs + 86_400_000L, zone, extraDays).first.let { it > 0 && it >= streaks(viewings, nowMs, zone, extraDays).first }
+
+    /** Streak lengths worth announcing to the family. */
+    val STREAK_MILESTONES = listOf(7, 14, 30, 50, 100, 200, 365)
+
+    fun streakMilestone(days: Int): Int? = STREAK_MILESTONES.lastOrNull { it <= days }
+
     // ------------------------------------------------------------ Badges
 
     fun badges(

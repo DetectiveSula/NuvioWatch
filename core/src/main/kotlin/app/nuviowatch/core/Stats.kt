@@ -48,6 +48,10 @@ data class Stats(
     val longestStreak: Int,
     /** Consecutive days up to today (or yesterday) with something watched. */
     val currentStreak: Int,
+    /** First day of the current streak. */
+    val streakSince: LocalDate? = null,
+    /** The missed day the current streak's freeze covered, if one was used. */
+    val freezeOn: LocalDate? = null,
 ) {
     companion object {
         val EMPTY = Stats(0, 0, 0, 0, 0, emptyList(), emptyList(), emptyList(), List(24) { 0L }, null, emptyMap(), 0, 0)
@@ -121,20 +125,9 @@ object StatsCalculator {
         // Any watching at all counts towards a streak, even under a minute.
         val activeSet = viewings.filter { it.atMs > 0 && it.watchedMs > 0 }.map { dateOf(it.atMs) }.toSet() + extraActiveDays
         val activeDays = activeSet.filter { !it.isAfter(today) }.sorted()
-        var longest = 0
-        var run = 0
-        var previous: LocalDate? = null
-        for (day in activeDays) {
-            run = if (previous != null && previous.plusDays(1) == day) run + 1 else 1
-            longest = maxOf(longest, run)
-            previous = day
-        }
-        var current = 0
-        var cursor = if (today in activeSet) today else today.minusDays(1)
-        while (cursor in activeSet) {
-            current++
-            cursor = cursor.minusDays(1)
-        }
+        val longest = Streaks.longest(activeDays)
+        val currentRun = Streaks.current(activeSet, today)
+        val current = currentRun.days
 
         val inRange = if (sinceMs == null) viewings else viewings.filter { it.atMs >= sinceMs }
         val perHour = LongArray(24)
@@ -161,8 +154,70 @@ object StatsCalculator {
             hours = perHour.toList(),
             lastActivityMs = viewings.maxOfOrNull { it.atMs }?.takeIf { it > 0 },
             perProfile = inRange.groupBy { it.profileIndex }.mapValues { (_, vs) -> vs.sumOf { it.watchedMs } },
-            longestStreak = longest,
+            longestStreak = maxOf(longest, current),
             currentStreak = current,
+            streakSince = currentRun.since,
+            freezeOn = currentRun.freezeOn,
         )
+    }
+}
+
+/** A streak: days watched in a row, the day it began, and the missed day a freeze covered. */
+data class StreakRun(val days: Int, val since: LocalDate?, val freezeOn: LocalDate?)
+
+/**
+ * Streaks with a weekly freeze: one missed day is forgiven if no other day was
+ * forgiven in the week before it. Forgiven days keep a streak alive but don't add to it.
+ */
+object Streaks {
+    const val FREEZE_EVERY_DAYS = 7L
+
+    fun current(days: Set<LocalDate>, today: LocalDate): StreakRun {
+        var cursor = if (today in days) today else today.minusDays(1)
+        var count = 0
+        var since: LocalDate? = null
+        var lastFreeze: LocalDate? = null
+        while (true) {
+            if (cursor in days) {
+                count++
+                since = cursor
+                cursor = cursor.minusDays(1)
+                continue
+            }
+            val before = cursor.minusDays(1)
+            val freezeReady = lastFreeze == null || java.time.temporal.ChronoUnit.DAYS.between(cursor, lastFreeze) >= FREEZE_EVERY_DAYS
+            if (before in days && freezeReady) {
+                lastFreeze = cursor
+                cursor = before
+                continue
+            }
+            break
+        }
+        return StreakRun(count, since, lastFreeze.takeIf { count > 0 })
+    }
+
+    fun longest(sortedDays: List<LocalDate>): Int {
+        var longest = 0
+        var run = 0
+        var previous: LocalDate? = null
+        var lastFreeze: LocalDate? = null
+        for (day in sortedDays) {
+            val p = previous
+            run = when {
+                p != null && p.plusDays(1) == day -> run + 1
+                p != null && p.plusDays(2) == day &&
+                    (lastFreeze == null || java.time.temporal.ChronoUnit.DAYS.between(lastFreeze, p.plusDays(1)) >= FREEZE_EVERY_DAYS) -> {
+                    lastFreeze = p.plusDays(1)
+                    run + 1
+                }
+                else -> {
+                    lastFreeze = null
+                    1
+                }
+            }
+            longest = maxOf(longest, run)
+            previous = day
+        }
+        return longest
     }
 }

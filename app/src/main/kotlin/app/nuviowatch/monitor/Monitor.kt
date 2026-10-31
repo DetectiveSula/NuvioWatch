@@ -115,6 +115,11 @@ object Monitor {
             prefs.liveEntries = live
             prefs.sessions = sessions
             prefs.lastPollError = null
+            // Streak milestones soon after they happen (at most every 10 minutes).
+            if (now - prefs.lastStreakCheck > 10 * 60_000L) {
+                prefs.lastStreakCheck = now
+                runCatching { app.nuviowatch.recap.Nudges.announceStreaks(context, graph.repository.snapshot.value) }
+            }
             NowWidget.update(context)
         } catch (e: CancellationException) {
             throw e
