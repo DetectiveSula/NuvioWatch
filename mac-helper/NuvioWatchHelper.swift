@@ -210,14 +210,17 @@ func writeFrame(_ fd: Int32, _ opcode: UInt32, _ object: [String: Any]) {
 }
 
 func serve(_ fd: Int32, playback: PlaybackState) {
+    log("Nuvio Desktop connected")
     defer {
         close(fd)
+        log("Nuvio Desktop disconnected")
         playback.disconnected()
     }
     while let (opcode, payload) = readFrame(fd) {
         let json = (try? JSONSerialization.jsonObject(with: payload)) as? [String: Any] ?? [:]
         switch opcode {
         case opHandshake:
+            log("handshake from client \(json["client_id"] as? String ?? "?")")
             writeFrame(fd, opFrame, [
                 "cmd": "DISPATCH",
                 "evt": "READY",
@@ -229,6 +232,8 @@ func serve(_ fd: Int32, playback: PlaybackState) {
             writeFrame(fd, opFrame, ["cmd": cmd, "nonce": nonce, "evt": NSNull(), "data": [String: Any]()])
             if cmd == "SET_ACTIVITY" {
                 let args = json["args"] as? [String: Any]
+                let activity = args?["activity"] as? [String: Any]
+                log("status: \(activity?["details"] as? String ?? "(cleared)") · \(activity?["state"] as? String ?? "")")
                 playback.activityChanged(args?["activity"] as? [String: Any])
             }
         case opPing:
