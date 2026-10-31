@@ -34,9 +34,11 @@ import java.util.Date
 
 object Notifier {
     const val ONGOING_ID = 1
-    private const val ALERTS = "watch_alerts"
+    // Channel importance can't be raised after creation, so the pop-up versions use new ids.
+    private const val ALERTS = "alerts_v2"
     private const val ONGOING = "monitor"
-    private const val RECAPS = "recaps"
+    private const val RECAPS = "recaps_v2"
+    private val oldChannels = setOf("watch_alerts", "recaps")
 
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -46,10 +48,14 @@ object Notifier {
             },
         )
         manager.createNotificationChannel(
-            NotificationChannel(RECAPS, "Daily and weekly recaps", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "What the family watched today and this week"
+            NotificationChannel(RECAPS, "Recaps and announcements", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Daily and weekly recaps, badges, winners, reminders and app updates"
             },
         )
+        // Drop the old, quieter channels (and per-person ones from before they popped up).
+        manager.notificationChannels
+            .filter { it.id in oldChannels || (it.id.startsWith("person_") && !it.id.startsWith("person2_")) }
+            .forEach { manager.deleteNotificationChannel(it.id) }
         manager.createNotificationChannel(
             NotificationChannel(ONGOING, "Monitoring status", NotificationManager.IMPORTANCE_MIN).apply {
                 description = "Shown while Nuvio Watch is checking for activity"
@@ -78,6 +84,8 @@ object Notifier {
             .setColor(0xFFFF5C7A.toInt())
             .setContentIntent(openApp(context))
             .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setSilent(session.isUpdate)
             .setWhen(session.lastActivityAt)
             .setShowWhen(true)
@@ -98,7 +106,7 @@ object Notifier {
      * different sound and vibration (set in Android's notification settings).
      */
     fun personChannel(context: Context, profileIndex: Int, name: String): String {
-        val id = "person_$profileIndex"
+        val id = "person2_$profileIndex"
         val manager = context.getSystemService(NotificationManager::class.java)
         if (manager.getNotificationChannel(id) == null) {
             manager.createNotificationChannel(
@@ -138,6 +146,8 @@ object Notifier {
             .setColor(0xFFFF5C7A.toInt())
             .setContentIntent(openApp(context))
             .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setSilent(silent)
             .setWhen(event.at)
             .setShowWhen(true)
@@ -169,6 +179,8 @@ object Notifier {
             .setColor(0xFF8C9BFF.toInt())
             .setContentIntent(openApp(context))
             .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .build()
         @Suppress("MissingPermission")
         NotificationManagerCompat.from(context).notify(id, notification)
@@ -186,6 +198,8 @@ object Notifier {
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setColor(0xFFFFD166.toInt())
             .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(openApp(context))
             .build()
         @Suppress("MissingPermission")
@@ -204,6 +218,8 @@ object Notifier {
             .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(openApp(context))
             .build()
         @Suppress("MissingPermission")
@@ -220,6 +236,8 @@ object Notifier {
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(openApp(context))
         val id = "same|$heading".hashCode()
         if (askProfile != null && askName != null) {
@@ -239,6 +257,8 @@ object Notifier {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setTimeoutAfter(60_000)
             .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(openApp(context))
             .build()
         @Suppress("MissingPermission")
@@ -253,6 +273,8 @@ object Notifier {
             .setContentText("Open the Family tab to vote")
             .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(openApp(context))
             .build()
         @Suppress("MissingPermission")
@@ -269,6 +291,8 @@ object Notifier {
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(openApp(context))
             .build()
         @Suppress("MissingPermission")

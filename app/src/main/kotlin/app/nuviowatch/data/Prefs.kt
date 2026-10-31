@@ -177,8 +177,9 @@ class Prefs(context: Context) : SessionStore {
 
     /** True once the first-launch setup has been finished or skipped. */
     var onboarded: Boolean
-        get() = prefs.getBoolean("onboarded", false)
-        set(value) = prefs.edit { putBoolean("onboarded", value) }
+        // v2: the fuller setup, shown once more to devices that finished the first version.
+        get() = prefs.getBoolean("onboarded_v2", false)
+        set(value) = prefs.edit { putBoolean("onboarded_v2", value) }
 
     /** Badges already announced, as "profile|BADGE"; null until the first check seeds it quietly. */
     var announcedBadges: Set<String>?
