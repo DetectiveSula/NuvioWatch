@@ -208,7 +208,9 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             items(picks, key = { it.contentId }) { pick ->
                                 val info = state.titles[pick.contentId]
-                                Column(Modifier.width(120.dp)) {
+                                val context = androidx.compose.ui.platform.LocalContext.current
+                                val series = state.viewings.any { it.contentId == pick.contentId && it.series }
+                                Column(Modifier.width(120.dp).clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Open in Nuvio") { openInNuvio(context, pick.contentId, series) }) {
                                     Poster(info?.poster, width = 120.dp, corner = 14.dp)
                                     Spacer(Modifier.height(6.dp))
                                     Text(info?.name ?: pick.fallbackTitle, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -296,9 +298,13 @@ fun StreakAvatar(profile: Profile, streak: Int, crowned: Boolean, size: androidx
 
 @Composable
 private fun AbandonedRow(a: AbandonedTitle, state: UiState, showProfile: Boolean) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val info = state.titles[a.contentId]
     val profile = state.profile(a.profileIndex)
-    Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open in Nuvio") { openInNuvio(context, a.contentId, a.season != null) }.padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Poster(info?.poster, width = 36.dp, corner = 8.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -315,6 +321,7 @@ private fun AbandonedRow(a: AbandonedTitle, state: UiState, showProfile: Boolean
 
 @Composable
 private fun UpNextRow(u: UpNext, state: UiState, showProfile: Boolean) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val info = state.titles[u.contentId]
     val profile = state.profile(u.profileIndex)
     val status = when {
@@ -322,7 +329,10 @@ private fun UpNextRow(u: UpNext, state: UiState, showProfile: Boolean) {
         u.availableNow -> "Ready"
         else -> u.next.releasedMs?.let { airsIn(it, state.clock) } ?: "Coming soon"
     }
-    Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open in Nuvio") { openInNuvio(context, u.contentId, series = true) }.padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box {
             Poster(info?.poster, width = 38.dp, corner = 8.dp)
             if (showProfile && profile != null) {

@@ -86,6 +86,7 @@ data class UiState(
     val email: String = "",
     /** The account id; it's also the Mac helper's setup code. */
     val accountId: String = "",
+    val onboarded: Boolean = true,
     val server: ServerStatus = ServerStatus.DETECTING,
     val serverUrl: String = "",
     val nuvioInstalled: Boolean = false,
@@ -124,6 +125,7 @@ data class UiState(
 }
 
 private data class Local(
+    val onboarded: Boolean = true,
     val social: SocialState = SocialState(),
     val episodes: Map<String, List<EpisodeInfo>> = emptyMap(),
     val recaps: RecapSettings = RecapSettings(),
@@ -159,6 +161,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             signedIn = signedIn,
             email = prefs.session?.email.orEmpty(),
             accountId = prefs.session?.userId.orEmpty(),
+            onboarded = local.onboarded,
             server = local.server,
             serverUrl = prefs.serverConfig?.baseUrl.orEmpty(),
             nuvioInstalled = graph.isNuvioInstalled,
@@ -187,6 +190,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
     init {
+        local.update { it.copy(onboarded = prefs.onboarded) }
         // Announce predictions as they settle.
         viewModelScope.launch {
             while (true) {
@@ -300,6 +304,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val ok = Inbox.react(getApplication(), live.event, live.profile?.index, emoji)
         val who = live.profile?.name ?: live.event.deviceName
         local.update { it.copy(social = it.social.copy(reactions = prefs.reactions, message = if (ok) "Sent $emoji to $who" else "Couldn't send, check your connection")) }
+    }
+
+    fun finishOnboarding() {
+        prefs.onboarded = true
+        local.update { it.copy(onboarded = true) }
     }
 
     fun ping(profileIndex: Int, kind: String, title: String, deviceName: String? = null) = viewModelScope.launch {

@@ -246,7 +246,11 @@ fun NowScreen(state: UiState, vm: MainViewModel, onOpenSettings: () -> Unit) {
         // A reaction just arrived: show it big for a moment.
         burst?.let { r ->
             val scale = remember(r.id) { Animatable(0.2f) }
-            LaunchedEffect(r.id) { scale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.45f)) }
+            val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+            LaunchedEffect(r.id) {
+                haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                scale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.45f))
+            }
             Column(
                 Modifier.align(Alignment.Center).padding(bottom = 120.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -349,10 +353,14 @@ private fun ActionChip(label: String, onClick: () -> Unit) {
 /** Quick emoji reactions to whoever is watching. */
 @Composable
 private fun ReactionBar(onReact: (String) -> Unit) {
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         listOf("🔥", "😂", "😱", "😭", "💤", "👏", "❤️").forEach { e ->
             Box(
-                Modifier.size(40.dp).clip(CircleShape).background(Color(0x26FFFFFF)).clickable(role = Role.Button, onClickLabel = "React $e") { onReact(e) },
+                Modifier.size(40.dp).clip(CircleShape).background(Color(0x26FFFFFF)).clickable(role = Role.Button, onClickLabel = "React $e") {
+                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    onReact(e)
+                },
                 contentAlignment = Alignment.Center,
             ) { Text(e, fontSize = 20.sp) }
         }
@@ -491,6 +499,10 @@ private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (Strin
                     }
                     Text(formatClock(event.durationMs), style = MaterialTheme.typography.labelSmall, color = Color(0xFFD6D1E6))
                 }
+            }
+            val context = LocalContext.current
+            LiveHub.titleIdFor(event, state.titles)?.let { id ->
+                ActionChip("▶ Open in Nuvio") { openInNuvio(context, id, Fun.episodeOf(event.subtitle) != null) }
             }
             if (event.deviceId != state.social.myDeviceId) {
                 Spacer(Modifier.height(4.dp))
@@ -776,7 +788,11 @@ private fun HistoryRow(v: Viewing, state: UiState, showProfile: Boolean) {
     val info = state.titles[v.contentId]
     val profile = state.profile(v.profileIndex)
     val time = DateTimeFormatter.ofPattern("HH:mm").format(Instant.ofEpochMilli(v.atMs).atZone(ZoneId.systemDefault()))
-    Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+    val context = LocalContext.current
+    Row(
+        Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open in Nuvio") { openInNuvio(context, v.contentId, v.series) }.padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box {
             Poster(info?.poster, width = 38.dp, corner = 8.dp)
             if (showProfile && profile != null) {
@@ -1077,6 +1093,31 @@ private fun DeviceCard(state: UiState, vm: MainViewModel) {
                     color = TextMuted,
                 )
                 Text(device.adbCommand, style = MaterialTheme.typography.labelSmall, color = Color(0xFFC3CAFF))
+            }
+
+            Spacer(Modifier.height(14.dp))
+            val overlayOk = app.nuviowatch.live.ReactionOverlay.canShow(context)
+            Text("Reactions over the video", fontWeight = FontWeight.Medium)
+            Text(
+                if (overlayOk) "On ✓ Reactions float up over Nuvio while it plays here."
+                else "Lets reactions float up over the picture on this device, instead of a notification.",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (overlayOk) Color(0xFF7CE0C3) else TextMuted,
+            )
+            if (!overlayOk) {
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(onClick = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                }) { Text("Allow display over other apps") }
+                Text(
+                    "On a Fire Stick or TV without that screen: " + app.nuviowatch.live.ReactionOverlay.adbCommand(context),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFFC3CAFF),
+                )
             }
 
             Spacer(Modifier.height(14.dp))

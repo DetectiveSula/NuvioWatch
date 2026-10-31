@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Runs on TVs and Fire Sticks too, where there's no touchscreen. -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -19,6 +21,10 @@
     <queries>
         <package android:name="com.nuvio.app" />
         <package android:name="com.nuvio.tv" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="nuvio" />
+        </intent>
     </queries>
 
     <application

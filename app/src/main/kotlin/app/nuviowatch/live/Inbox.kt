@@ -53,7 +53,13 @@ object Inbox {
         val forMe = r.fromDeviceId != prefs.deviceId &&
             (r.toDeviceId == prefs.deviceId || (r.toProfile != null && r.toProfile == prefs.deviceProfile))
         val fresh = System.currentTimeMillis() - r.at < 10 * 60_000L
-        if (forMe && fresh) Notifier.showReaction(context, r)
+        if (forMe && fresh) {
+            if (r.toDeviceId == prefs.deviceId && ReactionOverlay.canShow(context)) {
+                ReactionOverlay.show(context, r.emoji, r.fromName)
+            } else {
+                Notifier.showReaction(context, r)
+            }
+        }
     }
 
     private fun onPrediction(context: Context, p: Prediction) {

@@ -170,7 +170,12 @@ class Prefs(context: Context) : SessionStore {
     fun myName(profiles: List<app.nuviowatch.core.Profile>): String =
         deviceProfile?.let { index -> profiles.firstOrNull { it.index == index }?.name } ?: deviceName
 
-        /** Badges already announced, as "profile|BADGE"; null until the first check seeds it quietly. */
+        /** True once the first-launch setup has been finished or skipped. */
+    var onboarded: Boolean
+        get() = prefs.getBoolean("onboarded", false)
+        set(value) = prefs.edit { putBoolean("onboarded", value) }
+
+    /** Badges already announced, as "profile|BADGE"; null until the first check seeds it quietly. */
     var announcedBadges: Set<String>?
         get() = if (prefs.contains("announced_badges")) prefs.getStringSet("announced_badges", emptySet()).orEmpty() else null
         set(value) = prefs.edit { if (value == null) remove("announced_badges") else putStringSet("announced_badges", value) }
