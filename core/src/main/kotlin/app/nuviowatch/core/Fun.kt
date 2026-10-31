@@ -649,7 +649,10 @@ object Fun {
             heat[d][b] += v.watchedMs
             slotWeeks.getOrPut(d to b) { mutableSetOf() }.add(day.toEpochDay() / 7)
         }
-        val peak = (0 until 7).flatMap { d -> (0 until 6).map { b -> d to b } }.maxByOrNull { (d, b) -> heat[d][b] }?.takeIf { (d, b) -> heat[d][b] > 0 }
+        // The regular slot: the most weeks with something on, then the most time.
+        val peak = (0 until 7).flatMap { d -> (0 until 6).map { b -> d to b } }
+            .filter { (d, b) -> heat[d][b] > 0 }
+            .maxWithOrNull(compareBy<Pair<Int, Int>>({ slotWeeks[it]?.size ?: 0 }, { (d, b) -> heat[d][b] }))
         val latest = inRange.maxByOrNull { nightMinutes(it.atMs, zone) }?.let { it.profileIndex to it.atMs }
         val earliest = inRange.filter { hour(it.atMs, zone) in 5..11 }.minByOrNull { nightMinutes(it.atMs, zone) }?.let { it.profileIndex to it.atMs }
 
