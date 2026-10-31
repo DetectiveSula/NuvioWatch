@@ -53,7 +53,7 @@ import app.nuviowatch.monitor.Notifier
 fun OnboardingScreen(state: UiState, vm: MainViewModel) {
     var step by rememberSaveable { mutableIntStateOf(0) }
     val steps = 4
-    val next = { if (step < steps - 1) step++ else vm.finishOnboarding() }
+    val next: () -> Unit = { if (step < steps - 1) step += 1 else vm.finishOnboarding() }
     val context = LocalContext.current
 
     Box(Modifier.fillMaxSize().background(Ink).glow(DefaultTint)) {
