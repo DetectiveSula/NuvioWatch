@@ -121,6 +121,16 @@ jobs:
             python3 scripts/find_nuvio_key.py "$RUNNER_TEMP/nuvio/$asset" >> "$GITHUB_ENV"
           fi
 
+      - name: Make the Mac app icon
+        run: |
+          brew install librsvg >/dev/null
+          mkdir -p icon.iconset
+          for s in 16 32 128 256 512; do
+            rsvg-convert -w $s -h $s desktop/icon.svg -o icon.iconset/icon_${s}x${s}.png
+            rsvg-convert -w $((s*2)) -h $((s*2)) desktop/icon.svg -o icon.iconset/icon_${s}x${s}@2x.png
+          done
+          iconutil -c icns icon.iconset -o desktop/icon.icns
+
       - name: Build the Mac app
         run: |
           set -o pipefail

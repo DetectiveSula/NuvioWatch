@@ -67,6 +67,8 @@ compose.desktop {
             modules("java.net.http", "jdk.unsupported")
             macOS {
                 bundleID = "app.nuviowatch.desktop"
+                // Made from icon.svg by the GitHub build.
+                project.file("icon.icns").takeIf { it.exists() }?.let { iconFile.set(it) }
                 appCategory = "public.app-category.entertainment"
                 infoPlist {
                     extraKeysRawXml = """

@@ -89,6 +89,7 @@ fun main(args: Array<String>) {
             onCloseRequest = { windowOpen = false },
             visible = windowOpen,
             title = "Nuvio Watch",
+            icon = painterResource("icon.svg"),
             state = rememberWindowState(size = DpSize(1120.dp, 780.dp)),
         ) {
             NuvioTheme { App() }

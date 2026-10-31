@@ -1,23 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "Family play": a play button with three family heads. Drawn on a 220-unit grid, scaled into the 108dp icon's safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Screen -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#7C8CFF"
-        android:strokeWidth="4"
-        android:pathData="M34,38h40a4,4 0,0 1,4 4v22a4,4 0,0 1,-4 4h-40a4,4 0,0 1,-4 -4v-22a4,4 0,0 1,4 -4z" />
-    <path
-        android:fillColor="#7C8CFF"
-        android:pathData="M46,72h16v4h-16z" />
-    <!-- Play mark -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M49,45l12,8 -12,8z" />
-    <!-- Live dot -->
-    <path
-        android:fillColor="#FF5C7A"
-        android:pathData="M74,34m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+    <group android:scaleX="0.4" android:scaleY="0.4" android:translateX="11.2" android:translateY="5.4">
+        <path android:pathData="M78,52 Q70,47 70,57 L70,163 Q70,173 78,168 L168,116 Q176,110 168,104 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="70" android:startY="52" android:endX="176" android:endY="168">
+                    <item android:offset="0" android:color="#FF8C9BFF" />
+                    <item android:offset="1" android:color="#FFFF5C7A" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path android:fillColor="#5B3FD1" android:strokeColor="#17142A" android:strokeWidth="6"
+            android:pathData="M38,168 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0" />
+        <path android:fillColor="#7CE0C3" android:strokeColor="#17142A" android:strokeWidth="6"
+            android:pathData="M68,176 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0" />
+        <path android:fillColor="#FFD166" android:strokeColor="#17142A" android:strokeWidth="6"
+            android:pathData="M98,168 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0" />
+    </group>
 </vector>
