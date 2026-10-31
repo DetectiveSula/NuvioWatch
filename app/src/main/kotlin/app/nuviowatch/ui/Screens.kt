@@ -50,6 +50,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -876,6 +877,15 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
                     }
                 }
                 if (state.settings.enabled) {
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(onClick = { Notifier.openBackgroundNotificationSettings(context) }) {
+                        Text("Hide the \"Watching for Nuvio activity\" notification")
+                    }
+                    Text(
+                        "Android shows it while the app works in the background. Turn off \"Monitoring status\" on the next screen: alerts keep working.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextMuted,
+                    )
                     Spacer(Modifier.height(8.dp))
                     Text(
                         when {

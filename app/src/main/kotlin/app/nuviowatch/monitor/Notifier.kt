@@ -165,6 +165,29 @@ object Notifier {
 
     fun liveId(deviceId: String) = "live|$deviceId".hashCode()
 
+    /**
+     * Android insists on a notification while the app works in the background. Turning its
+     * category off hides it and the app keeps running; this opens that switch.
+     */
+    fun openBackgroundNotificationSettings(context: Context) {
+        runCatching {
+            context.startActivity(
+                Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    .putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, ONGOING)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }.onFailure {
+            runCatching {
+                context.startActivity(
+                    Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
+        }
+    }
+
     fun cancel(context: Context, id: Int) = NotificationManagerCompat.from(context).cancel(id)
 
     /** What someone just watched, sent the moment they stop; replaces their "started watching" alert. */
