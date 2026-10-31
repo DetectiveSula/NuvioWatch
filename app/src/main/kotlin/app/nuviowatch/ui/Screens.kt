@@ -1078,42 +1078,31 @@ private fun WebCard(state: UiState) {
     }
 }
 
-/** Setting up live reports from Nuvio Desktop on a Mac. */
+/** The Mac app: download link and setup steps. */
 @Composable
-private fun MacCard(state: UiState) {
-    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
-    var copied by remember { mutableStateOf(false) }
+private fun MacCard(@Suppress("UNUSED_PARAMETER") state: UiState) {
+    val context = LocalContext.current
     GlassCard {
-        SectionTitle("Mac (Nuvio Desktop)")
+        SectionTitle("Mac")
         Text(
-            "Get instant alerts from Nuvio Desktop on a Mac too. It works through Nuvio Desktop's Discord Rich Presence setting; Discord itself isn't needed.",
+            "Nuvio Watch for Mac: who's watching, alerts, stats and Wrapped on your Mac, and it reports what Nuvio Desktop plays. It starts by itself when you log in.",
             style = MaterialTheme.typography.bodySmall,
             color = TextMuted,
         )
         Spacer(Modifier.height(10.dp))
         listOf(
-            "1. Copy the command below and paste it into Terminal on the Mac (Applications → Utilities → Terminal), then press Return.",
-            "2. In Nuvio Desktop → Settings, turn on Discord Rich Presence, then restart it.",
+            "1. On the Mac, download NuvioWatch.dmg from the link below, open it and drag Nuvio Watch into Applications.",
+            "2. Open it. The first time, macOS may block it: go to System Settings → Privacy & Security and click Open Anyway.",
+            "3. Sign in with your Nuvio account. In Nuvio Desktop → Settings, turn on Discord Rich Presence.",
         ).forEach { Text(it, fontSize = 13.sp, modifier = Modifier.padding(vertical = 2.dp)) }
         Spacer(Modifier.height(10.dp))
-        val command = "curl -fsSL https://raw.githubusercontent.com/DetectiveSula/NuvioWatch/main/mac-helper/get.sh | bash -s ${state.accountId} \"Mac\""
-        Text(
-            command,
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0x1AFFFFFF)).padding(12.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFFC3CAFF),
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = {
-            clipboard.setText(androidx.compose.ui.text.AnnotatedString(command))
-            copied = true
-        }) { Text(if (copied) "Copied ✓" else "Copy command") }
-        Text(
-            "The code in the command is your setup code. Keep it within the family: anyone with it can see what's playing.",
-            fontSize = 11.sp,
-            color = TextMuted,
-            modifier = Modifier.padding(top = 6.dp),
-        )
+        val link = "https://github.com/DetectiveSula/NuvioWatch/releases/latest"
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = {
+                context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), "Send the Mac download link"))
+            }) { Text("Send link to Mac") }
+        }
+        Text("It replaces the old Terminal helper, and removes it automatically.", fontSize = 11.sp, color = TextMuted, modifier = Modifier.padding(top = 6.dp))
     }
 }
 
