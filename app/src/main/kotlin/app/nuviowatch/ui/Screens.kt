@@ -939,12 +939,11 @@ private fun MacCard(state: UiState) {
         )
         Spacer(Modifier.height(10.dp))
         listOf(
-            "1. On the Mac, download NuvioWatch-Mac.zip from the latest release on GitHub and open it.",
-            "2. In Terminal, run the command below.",
-            "3. In Nuvio Desktop → Settings, turn on Discord Rich Presence, then restart it.",
+            "1. Copy the command below and paste it into Terminal on the Mac (Applications → Utilities → Terminal), then press Return.",
+            "2. In Nuvio Desktop → Settings, turn on Discord Rich Presence, then restart it.",
         ).forEach { Text(it, fontSize = 13.sp, modifier = Modifier.padding(vertical = 2.dp)) }
         Spacer(Modifier.height(10.dp))
-        val command = "bash ~/Downloads/NuvioWatch-Mac/install.sh ${state.accountId} \"Mac\""
+        val command = "curl -fsSL https://raw.githubusercontent.com/DetectiveSula/NuvioWatch/main/mac-helper/get.sh | bash -s ${state.accountId} \"Mac\""
         Text(
             command,
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0x1AFFFFFF)).padding(12.dp),

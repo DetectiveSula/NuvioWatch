@@ -52,6 +52,20 @@ Then add these repository secrets (**Settings → Secrets and variables → Acti
 4. Tap **Allow running in background** and **Allow precise timing**, so Android doesn't delay the checks.
 5. Under **Alert me about**, switch off your own profile if you don't want alerts about yourself.
 
+## Mac (Nuvio Desktop)
+
+Nuvio Watch only runs on Android. For instant alerts when someone watches on a Mac, install the small background helper once. Paste the command from **Settings → Mac (Nuvio Desktop)** in the app into Terminal. It looks like this:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DetectiveSula/NuvioWatch/main/mac-helper/get.sh | bash -s SETUP_CODE "Mac"
+```
+
+Then turn on **Discord Rich Presence** in Nuvio Desktop's settings and restart it. The helper receives what Nuvio Desktop would send to Discord and forwards play, pause and stop to the family. The Discord app isn't needed; if it's running, Nuvio talks to it instead. To remove the helper, run:
+
+```bash
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/app.nuviowatch.helper.plist; rm -rf ~/Library/LaunchAgents/app.nuviowatch.helper.plist ~/Library/Application\ Support/NuvioWatch
+```
+
 ## Self-hosted Nuvio servers
 
 On the sign-in screen, tap **Use a different server** and enter your server's address. Nuvio Watch reads its settings from `/.well-known/nuvio`, or you can paste the key yourself.
