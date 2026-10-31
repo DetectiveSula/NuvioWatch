@@ -272,7 +272,11 @@ private fun Opening(state: UiState, d: Data) {
             PosterTile(state, ids[2], 112.dp, 2, Modifier.align(Alignment.CenterEnd).offset(y = 10.dp).rotate(11f))
         }
         Label("The Family Wrapped", Accent)
-        Text(d.label, style = display(if (d.label.length <= 4) 104 else 64), color = Color.White, lineHeight = if (d.label.length <= 4) 96.sp else 64.sp)
+        // Shrink long month names (September) so they stay on one line.
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val size = minOf(104f, maxWidth.value / (d.label.length * 0.62f)).toInt()
+            Text(d.label, style = display(size), color = Color.White, lineHeight = (size * 0.95f).sp, maxLines = 1, softWrap = false)
+        }
         Spacer(Modifier.height(8.dp))
         Text(
             "${hours(d.w.totalMs)} hours. $people ${if (people == 1) "person" else "people"}. One sofa.\nLet's see what you lot got up to.",
@@ -422,46 +426,47 @@ private fun Quiz(state: UiState, d: Data) {
     Slide(Orange) {
         Label("Quick quiz")
         Heading("Who watched the most ${quiz.genre.lowercase()} ${if (d.year) "this year" else "in ${d.label}"}?", 36)
-        Spacer(Modifier.height(8.dp))
-        Text("Pass the phone round. Everyone guesses, then tap.", fontSize = 15.sp)
+        Spacer(Modifier.height(12.dp))
+        val chosen = picked
+        // The answer shows up here, under the question, so it's never pushed off the screen.
+        if (chosen == null) {
+            Text("Pass the phone round. Everyone guesses, then tap a name.", fontSize = 15.sp, lineHeight = 21.sp)
+        } else {
+            val shape = RoundedCornerShape(22.dp)
+            val second = quiz.counts.filterKeys { it != quiz.answer }.values.maxOrNull() ?: 0
+            Column(Modifier.fillMaxWidth().clip(shape).background(Accent.copy(alpha = 0.18f)).border(1.dp, Accent.copy(alpha = 0.45f), shape).padding(14.dp)) {
+                Text(if (chosen == quiz.answer) "Correct! You know your family." else "Not quite!", style = display(19), color = Color.White)
+                Text(
+                    "It was ${state.profileName(quiz.answer)}: ${quiz.counts[quiz.answer] ?: 0} ${quiz.genre.lowercase()} watches. Nobody else got past $second.",
+                    fontSize = 14.sp, lineHeight = 19.sp,
+                )
+            }
+        }
         Spacer(Modifier.weight(1f))
+        // Smaller rows when the whole family is playing.
+        val compact = people.size > 4
         people.forEach { i ->
             val shape = RoundedCornerShape(22.dp)
             val right = i == quiz.answer
             val (bg, line, fg) = when {
-                picked == null -> Triple(CardFill, CardLine, TextPrimary)
+                chosen == null -> Triple(CardFill, CardLine, TextPrimary)
                 right -> Triple(Color.White, Color.White, Ink)
-                i == picked -> Triple(LiveRed.copy(alpha = 0.14f), LiveRed, TextPrimary)
+                i == chosen -> Triple(LiveRed.copy(alpha = 0.14f), LiveRed, TextPrimary)
                 else -> Triple(Color(0x08FFFFFF), Color(0x0DFFFFFF), Color(0xFF8F89A3))
             }
             Row(
-                Modifier.fillMaxWidth().padding(bottom = 10.dp).heightIn(min = 64.dp).clip(shape).background(bg).border(1.dp, line, shape)
+                Modifier.fillMaxWidth().padding(bottom = if (compact) 8.dp else 10.dp).heightIn(min = if (compact) 52.dp else 64.dp)
+                    .clip(shape).background(bg).border(1.dp, line, shape)
                     .clickable(role = Role.Button) { picked = if (picked == null) i else null }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Avatar(state, i, 40.dp)
+                Avatar(state, i, if (compact) 34.dp else 40.dp)
                 Spacer(Modifier.width(14.dp))
-                Text(state.profileName(i), fontWeight = FontWeight.Bold, fontSize = 19.sp, color = fg, modifier = Modifier.weight(1f))
-                if (picked != null && (right || i == picked)) {
-                    val n = quiz.counts[i] ?: 0
-                    Text(if (right) "$n" else "Nope", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = fg)
+                Text(state.profileName(i), fontWeight = FontWeight.Bold, fontSize = if (compact) 17.sp else 19.sp, color = fg, modifier = Modifier.weight(1f))
+                if (chosen != null && (right || i == chosen)) {
+                    Text(if (right) "${quiz.counts[i] ?: 0}" else "Nope", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = fg)
                 }
-            }
-        }
-        Spacer(Modifier.height(6.dp))
-        val chosen = picked
-        if (chosen == null) {
-            Text("Tap a name to reveal the answer", fontSize = 14.sp, color = TextMuted, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-        } else {
-            val shape = RoundedCornerShape(22.dp)
-            val second = quiz.counts.filterKeys { it != quiz.answer }.values.maxOrNull() ?: 0
-            Column(Modifier.fillMaxWidth().clip(shape).background(Accent.copy(alpha = 0.14f)).border(1.dp, Accent.copy(alpha = 0.4f), shape).padding(16.dp)) {
-                Text(if (chosen == quiz.answer) "Correct! You know your family." else "Not quite!", style = display(20), color = Color.White)
-                Text(
-                    "It was ${state.profileName(quiz.answer)}: ${quiz.counts[quiz.answer] ?: 0} ${quiz.genre.lowercase()} watches. Nobody else got past $second.",
-                    fontSize = 15.sp, lineHeight = 21.sp,
-                )
             }
         }
     }

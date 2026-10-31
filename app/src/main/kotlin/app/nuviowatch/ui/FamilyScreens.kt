@@ -126,6 +126,26 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
         }
 
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            // Wrapped
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                listOf(0, 1, YEAR).forEach { monthsAgo ->
+                    val month = LocalDate.now().minusMonths(maxOf(monthsAgo, 0).toLong())
+                    val label = if (monthsAgo == YEAR) LocalDate.now().year.toString() else month.month.getDisplayName(DateTextStyle.SHORT, Locale.getDefault())
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(Brush.linearGradient(listOf(Color(0xFF5B3FD1), Color(0xFFFF5C7A))))
+                            .clickable(role = Role.Button) { onStory(monthsAgo) }
+                            .padding(16.dp),
+                    ) {
+                        Text(if (monthsAgo == 1) "WRAPPED" else "SO FAR", style = Eyebrow, color = Color.White.copy(alpha = 0.8f))
+                        Text(label, style = display(24), color = Color.White)
+                        Text("Tap to play", fontSize = 12.sp, color = Color.White.copy(alpha = 0.85f))
+                    }
+                }
+            }
+
             // Weekly leaderboard
             GlassCard(Modifier.capturable(boardShare), padding = 18.dp) {
                 Row(verticalAlignment = Alignment.Bottom) {
@@ -144,7 +164,7 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
                         StreakAvatar(p, streaks[p.index] ?: 0, crowned = p.index == champion, size = 38.dp)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(p.name, fontWeight = FontWeight.SemiBold)
+                            NameBadges(p.name, streaks[p.index] ?: 0, p.index == champion)
                             Spacer(Modifier.height(5.dp))
                             ThinProgress(entry.points.toFloat() / top, visibleOnDark(parseColor(p.avatarColorHex)), height = 6.dp, track = Color(0x14FFFFFF))
                         }
@@ -182,26 +202,6 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
                 GlassCard(padding = 18.dp) {
                     SectionTitle("Up next")
                     queue.take(8).forEach { UpNextRow(it, state, showProfile = true) }
-                }
-            }
-
-            // Wrapped
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                listOf(0, 1, YEAR).forEach { monthsAgo ->
-                    val month = LocalDate.now().minusMonths(maxOf(monthsAgo, 0).toLong())
-                    val label = if (monthsAgo == YEAR) LocalDate.now().year.toString() else month.month.getDisplayName(DateTextStyle.SHORT, Locale.getDefault())
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(Brush.linearGradient(listOf(Color(0xFF5B3FD1), Color(0xFFFF5C7A))))
-                            .clickable(role = Role.Button) { onStory(monthsAgo) }
-                            .padding(16.dp),
-                    ) {
-                        Text(if (monthsAgo == 1) "WRAPPED" else "SO FAR", style = Eyebrow, color = Color.White.copy(alpha = 0.8f))
-                        Text(label, style = display(24), color = Color.White)
-                        Text("Tap to play", fontSize = 12.sp, color = Color.White.copy(alpha = 0.85f))
-                    }
                 }
             }
 
@@ -248,16 +248,19 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
             // Everyone
             GlassCard(padding = 18.dp) {
                 SectionTitle("Everyone")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    profiles.forEach { p ->
-                        Column(
-                            Modifier.width(72.dp).clip(RoundedCornerShape(14.dp)).clickable { onPerson(p.index) }.padding(vertical = 4.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            StreakAvatar(p, streaks[p.index] ?: 0, crowned = p.index == champion, size = 56.dp)
-                            Spacer(Modifier.height(6.dp))
-                            Text(p.name, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                profiles.chunked(3).forEach { row ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                        row.forEach { p ->
+                            Column(
+                                Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).clickable { onPerson(p.index) }.padding(vertical = 6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                StreakAvatar(p, streaks[p.index] ?: 0, crowned = p.index == champion, size = 56.dp)
+                                Spacer(Modifier.height(8.dp))
+                                NameBadges(p.name, streaks[p.index] ?: 0, p.index == champion, fontSize = 13, center = true)
+                            }
                         }
+                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }
@@ -284,30 +287,37 @@ private fun SmallChoice(label: String, active: Boolean, onClick: () -> Unit) {
 }
 
 /** Avatar with a streak flame and, for last week's winner, a crown. */
+/** A name followed by its badges: 👑 last week's winner, 🔥 a watching streak. */
 @Composable
-fun StreakAvatar(profile: Profile, streak: Int, crowned: Boolean, size: androidx.compose.ui.unit.Dp) {
-    // The crown sits above the avatar; leave room for it so cards and rows don't clip it.
-    Box(Modifier.padding(top = if (crowned) size * 0.45f else 0.dp)) {
-        ProfileAvatar(profile, size = size)
+fun NameBadges(name: String, streak: Int, crowned: Boolean, fontSize: Int = 16, big: Boolean = false, center: Boolean = false) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = if (center) Arrangement.Center else Arrangement.Start) {
+        Text(
+            name,
+            style = if (big) display(fontSize) else androidx.compose.ui.text.TextStyle(fontSize = fontSize.sp, fontWeight = FontWeight.SemiBold),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        val small = (fontSize * 0.75f).coerceIn(11f, 18f).sp
+        if (crowned) Text(" 👑", fontSize = small)
         if (streak >= 2) {
+            Spacer(Modifier.width(4.dp))
             Text(
                 "🔥$streak",
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .offset(x = 6.dp, y = 4.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Color(0xFF1A1724))
-                    .border(1.dp, Color(0x33FF8A3D), RoundedCornerShape(50))
-                    .padding(horizontal = 5.dp, vertical = 1.dp),
-                fontSize = (size.value * 0.22f).coerceIn(9f, 13f).sp,
+                modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF1A1724))
+                    .border(1.dp, Color(0x33FF8A3D), RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp),
+                fontSize = (fontSize * 0.6f).coerceIn(10f, 15f).sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFFFB27A),
             )
         }
-        if (crowned) {
-            Text("👑", modifier = Modifier.align(Alignment.TopCenter).offset(y = (-size.value * 0.44f).dp), fontSize = (size.value * 0.32f).sp)
-        }
     }
+}
+
+@Composable
+fun StreakAvatar(profile: Profile, @Suppress("UNUSED_PARAMETER") streak: Int, @Suppress("UNUSED_PARAMETER") crowned: Boolean, size: androidx.compose.ui.unit.Dp) {
+    // Crown and streak are shown next to the name (NameBadges), so avatars line up.
+    ProfileAvatar(profile, size = size)
 }
 
 @Composable
@@ -540,7 +550,7 @@ private fun ProfilePage(state: UiState, index: Int, onBack: () -> Unit) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             StreakAvatar(profile, stats.currentStreak, crowned = index == champion, size = 96.dp)
             Spacer(Modifier.height(14.dp))
-            Text(profile.name, style = display(34))
+            NameBadges(profile.name, stats.currentStreak, index == champion, fontSize = 34, big = true, center = true)
             Text(personality.title, style = display(18, FontWeight.Medium), color = color)
             Text(personality.blurb, color = TextMuted, textAlign = TextAlign.Center)
         }
