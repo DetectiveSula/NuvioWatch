@@ -501,7 +501,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    /** Sends a pretend "started" and "stopped" so phones can check they hear each other. */
+    /**
+     * Sends a pretend viewing so phones can check they hear each other: "started watching",
+     * then a stop 8 seconds later that should turn into a summary. The start is dated two
+     * minutes back so it counts as more than a quick peek.
+     */
     fun sendTest() = viewModelScope.launch {
         val relay = LiveHub.relay(getApplication())
         if (relay == null) {
@@ -514,13 +518,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             title = "Test alert",
             subtitle = "If you see this, phones can hear each other",
             state = PlayState.PLAYING,
-            at = System.currentTimeMillis(),
+            positionMs = 0,
+            durationMs = 10 * 60_000L,
+            at = System.currentTimeMillis() - 120_000L,
         )
         runCatching {
             relay.publish(base)
+            relay.publish(base.copy(positionMs = 60_000L, at = base.at + 60_000L))
+            local.update { it.copy(testMessage = "Sent \"started watching\". A summary should replace it in about 8 seconds.") }
             delay(8_000)
-            relay.publish(base.copy(state = PlayState.STOPPED, at = System.currentTimeMillis()))
-        }.onSuccess { local.update { it.copy(testMessage = "Test sent. Other phones with alerts on should buzz now.") } }
+            relay.publish(base.copy(state = PlayState.STOPPED, positionMs = 128_000L, at = System.currentTimeMillis()))
+        }.onSuccess { local.update { it.copy(testMessage = "Test sent. Phones with alerts on should show \"started watching\", then a summary.") } }
             .onFailure { e -> local.update { it.copy(testMessage = "Test failed: ${e.message}") } }
     }
 
