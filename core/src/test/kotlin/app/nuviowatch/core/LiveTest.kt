@@ -41,6 +41,18 @@ class LiveTest {
     }
 
     @Test
+    fun playerThatOpensPausedStillAnnouncesStart() {
+        val tracker = LiveTracker()
+        assertNull(tracker.apply(event(PlayState.PAUSED, t0)), "opening paused isn't watching yet")
+        assertEquals(LiveChange.STARTED, tracker.apply(event(PlayState.PLAYING, t0 + 1000)))
+        assertNull(tracker.apply(event(PlayState.PAUSED, t0 + 2000)))
+        assertNull(tracker.apply(event(PlayState.PLAYING, t0 + 3000)))
+        assertEquals(LiveChange.STOPPED, tracker.apply(event(PlayState.STOPPED, t0 + 4000)))
+        assertNull(tracker.apply(event(PlayState.PAUSED, t0 + 5000)))
+        assertNull(tracker.apply(event(PlayState.STOPPED, t0 + 6000)), "never played, so no 'stopped'")
+    }
+
+    @Test
     fun silentDevicesExpire() {
         val tracker = LiveTracker(staleMs = 60_000)
         tracker.apply(event(PlayState.PLAYING, t0))

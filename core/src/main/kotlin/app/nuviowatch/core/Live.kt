@@ -137,30 +137,47 @@ enum class LiveChange { STARTED, STOPPED }
  */
 class LiveTracker(private val staleMs: Long = 4 * 60_000L) {
     private val devices = mutableMapOf<String, LiveEvent>()
+    /** Title each device has been announced as playing, until it stops. */
+    private val announced = mutableMapOf<String, String>()
 
     val states: Map<String, LiveEvent> get() = devices.toMap()
 
     fun restore(saved: Map<String, LiveEvent>) {
         devices.clear()
         devices.putAll(saved)
+        announced.clear()
+        saved.values.filter { it.state == PlayState.PLAYING }.forEach { announced[it.deviceId] = key(it) }
     }
 
+    /**
+     * "Started" the first time a title actually plays on a device (even if the
+     * player opened paused), "stopped" when an announced title stops.
+     */
     fun apply(event: LiveEvent): LiveChange? {
         val previous = devices[event.deviceId]
         if (previous != null && previous.at > event.at) return null // out of order
         devices[event.deviceId] = event
-        val wasWatching = previous != null && previous.state != PlayState.STOPPED
-        return when {
-            event.state == PlayState.PLAYING && (!wasWatching || previous!!.title != event.title || previous.subtitle != event.subtitle) -> LiveChange.STARTED
-            event.state == PlayState.STOPPED && wasWatching -> LiveChange.STOPPED
-            else -> null
+        return when (event.state) {
+            PlayState.PLAYING -> if (announced[event.deviceId] != key(event)) {
+                announced[event.deviceId] = key(event)
+                LiveChange.STARTED
+            } else {
+                null
+            }
+            PlayState.PAUSED -> null
+            PlayState.STOPPED -> if (announced.remove(event.deviceId) != null) LiveChange.STOPPED else null
         }
     }
+
+    private fun key(e: LiveEvent) = "${e.title}|${e.subtitle.orEmpty()}"
 
     /** Marks silent devices as stopped and returns the ones that changed. */
     fun expire(nowMs: Long): List<LiveEvent> {
         val stale = devices.values.filter { it.state != PlayState.STOPPED && nowMs - it.at > staleMs }
-        return stale.map { it.copy(state = PlayState.STOPPED, at = nowMs) }.onEach { devices[it.deviceId] = it }
+        return stale.map { it.copy(state = PlayState.STOPPED, at = nowMs) }.onEach {
+            devices[it.deviceId] = it
+            announced.remove(it.deviceId)
+        }
     }
 
     companion object {
