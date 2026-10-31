@@ -12,6 +12,14 @@ if [ -z "$CODE" ]; then
   exit 1
 fi
 
+# The setup code is the Nuvio account id, a UUID like 1a2b3c4d-1234-5678-9abc-def012345678.
+if ! [[ "$CODE" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+  echo "\"$CODE\" isn't a setup code."
+  echo "Copy the full command from Nuvio Watch → Settings → Mac (Nuvio Desktop) on your phone;"
+  echo "the setup code is the long code with dashes in it."
+  exit 1
+fi
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DIR="$HOME/Library/Application Support/NuvioWatch"
 AGENT="$HOME/Library/LaunchAgents/app.nuviowatch.helper.plist"
