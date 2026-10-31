@@ -178,7 +178,7 @@ object Nudges {
     }
 
     /** A notification the first time a new version is seen; tapping it opens the app's Update button. */
-    private suspend fun announceUpdate(context: Context) {
+    suspend fun announceUpdate(context: Context) {
         val info = app.nuviowatch.data.AppUpdater.check(context) ?: return
         val prefs = context.graph.prefs
         if (prefs.lastSent("update") == info.versionName) return

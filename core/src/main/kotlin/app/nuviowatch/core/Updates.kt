@@ -28,13 +28,13 @@ class Updates(
     private data class Asset(val name: String = "", @SerialName("browser_download_url") val url: String = "")
 
     /** Null when this build is the newest (or GitHub can't be reached). */
-    suspend fun check(currentVersionCode: Int): UpdateInfo? = withContext(Dispatchers.IO) {
+    suspend fun check(currentVersionCode: Int, assetSuffix: String = ".apk"): UpdateInfo? = withContext(Dispatchers.IO) {
         runCatching {
             http.newCall(
                 Request.Builder().url("$apiBase/repos/$repo/releases/latest").header("Accept", "application/vnd.github+json").build(),
             ).execute().use { response ->
                 if (!response.isSuccessful) return@use null
-                parse(response.body?.string().orEmpty(), currentVersionCode)
+                parse(response.body?.string().orEmpty(), currentVersionCode, assetSuffix)
             }
         }.getOrNull()
     }
@@ -50,11 +50,11 @@ class Updates(
 
     companion object {
         /** Release tags are "v1.0.<build number>", and the build number is the app's versionCode. */
-        fun parse(json: String, currentVersionCode: Int): UpdateInfo? {
+        fun parse(json: String, currentVersionCode: Int, assetSuffix: String = ".apk"): UpdateInfo? {
             val release = NuvioClient.json.decodeFromString<Release>(json)
             val code = release.tag.substringAfterLast('.').toIntOrNull() ?: return null
             if (code <= currentVersionCode) return null
-            val apk = release.assets.firstOrNull { it.name.endsWith(".apk") } ?: return null
+            val apk = release.assets.firstOrNull { it.name.endsWith(assetSuffix) } ?: return null
             return UpdateInfo(code, release.tag.removePrefix("v"), apk.url, release.body.orEmpty().trim())
         }
     }

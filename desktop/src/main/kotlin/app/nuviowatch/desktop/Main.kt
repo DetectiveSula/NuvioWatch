@@ -44,6 +44,7 @@ fun main(args: Array<String>) {
     LoginItem.set(Model.store.saved.value.startAtLogin)
     NuvioDesktopBridge.start()
     Model.start()
+    MacUpdater.start()
 
     application {
         var windowOpen by remember { mutableStateOf("--background" !in args) }
@@ -78,6 +79,7 @@ fun main(args: Array<String>) {
                     }
                 }
                 Separator()
+                MacUpdater.available.value?.let { u -> Item("Install update ${u.versionName}", onClick = { MacUpdater.install() }) }
                 Item("Open Nuvio Watch", onClick = { windowOpen = true })
                 Item("Quit", onClick = ::exitApplication)
             },

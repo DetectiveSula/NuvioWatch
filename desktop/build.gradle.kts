@@ -44,6 +44,7 @@ val generateBuildInfo by tasks.registering {
             |
             |object BuildInfo {
             |    const val VERSION = "1.0.$runNumber"
+            |    const val RUN = ${runNumber.toIntOrNull() ?: 0}
             |    const val SERVER_KEY = "$key"
             |    const val SERVER_URLS = "$urls"
             |    const val FAMILY_DB_URL = "https://abkwdwlihhyyhejdjihm.supabase.co"

@@ -84,6 +84,9 @@ object Model {
 
     fun setStatus(part: String, text: String) = statuses.update { it + (part to "$text · ${java.time.LocalTime.now().withNano(0)}") }
 
+    /** Shows a Mac notification. */
+    fun notify(title: String, text: String) = _alerts.tryEmit(Alert(title, text))
+
     // ------------------------------------------------------------ Sign in and Nuvio data
 
     private var cachedClient: Pair<ServerConfig, NuvioClient>? = null

@@ -116,6 +116,11 @@ object Monitor {
             prefs.liveEntries = live
             prefs.sessions = sessions
             prefs.lastPollError = null
+            // New versions of Nuvio Watch, every 3 hours.
+            if (now - prefs.lastUpdateCheck > 3 * 3_600_000L) {
+                prefs.lastUpdateCheck = now
+                runCatching { app.nuviowatch.recap.Nudges.announceUpdate(context) }
+            }
             // Streak milestones soon after they happen (at most every 10 minutes).
             if (now - prefs.lastStreakCheck > 10 * 60_000L) {
                 prefs.lastStreakCheck = now

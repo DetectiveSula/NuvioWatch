@@ -547,6 +547,23 @@ private fun SettingsScreen() {
             OutlinedButton(onClick = { Model.showBubble("😂", "Test reaction") }) { Text("Test a reaction pop-up") }
         }
         GlassCard {
+            SectionTitle("Updates")
+            val update by MacUpdater.available.collectAsState()
+            val updateMessage by MacUpdater.message.collectAsState()
+            val scope = rememberCoroutineScope()
+            Text("Installed: ${BuildInfo.VERSION}")
+            update?.let { Text("Available: ${it.versionName}", color = Mint, fontWeight = FontWeight.SemiBold) }
+            updateMessage?.let { Text(it, fontSize = 13.sp, color = TextMuted) }
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (update != null) {
+                    Button(onClick = { MacUpdater.install() }, colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Ink)) { Text("Install update") }
+                }
+                OutlinedButton(onClick = { scope.launch { MacUpdater.check(manual = true) } }) { Text("Check for updates") }
+            }
+            Text("Nuvio Watch checks every few hours and sends a notification when there's a new version.", fontSize = 12.sp, color = TextMuted, modifier = Modifier.padding(top = 6.dp))
+        }
+        GlassCard {
             SectionTitle("Account")
             Text(saved.session?.email?.ifBlank { null } ?: "Signed in")
             Text("Nuvio Watch for Mac ${BuildInfo.VERSION}", fontSize = 12.sp, color = TextMuted)
