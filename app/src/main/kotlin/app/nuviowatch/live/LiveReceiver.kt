@@ -42,17 +42,35 @@ object LiveReceiver {
                 alert(context, event, change)
             }
         }
-        if (finished != null && fresh) summarize(context, finished)
+        if (fresh) {
+            when {
+                finished != null -> summarize(context, finished)
+                // Stopped, but this phone hadn't been timing it (e.g. it was updated or restarted
+                // mid-way): still say what they watched and where they got to.
+                change == LiveChange.STOPPED -> summarize(
+                    context,
+                    LiveRun(
+                        event.deviceId, event.deviceName, event.profileIndex, event.title, startedAt = event.at, lastAt = event.at,
+                        lastState = PlayState.STOPPED, items = listOf(app.nuviowatch.core.LiveRunItem(event.subtitle?.takeIf { it.isNotBlank() }, 0, event.positionMs, event.durationMs)),
+                    ),
+                    untimed = true,
+                )
+                event.state == PlayState.STOPPED -> prefs.setStatus("summary", "Stop received from ${event.deviceName}, but nothing had been playing there")
+            }
+        } else if (event.state == PlayState.STOPPED) {
+            prefs.setStatus("summary", "Stop from ${event.deviceName} arrived late, not sent")
+        }
     }
 
     /** "Mum watched 2 episodes of X", replacing their "started watching" alert. */
-    private suspend fun summarize(context: Context, run: LiveRun) {
+    private suspend fun summarize(context: Context, run: LiveRun, untimed: Boolean = false) {
         val graph = context.graph
         val prefs = graph.prefs
         val id = Notifier.liveId(run.deviceId)
-        if (run.playedMs < LiveRuns.MIN_SUMMARY_MS) {
+        if (!untimed && run.playedMs < LiveRuns.MIN_SUMMARY_MS) {
             // Only a peek: take back the "started watching" alert.
             Notifier.cancel(context, id)
+            prefs.setStatus("summary", "Not sent: ${run.title} played for under a minute")
             return
         }
         val titles = graph.titles.titles.value

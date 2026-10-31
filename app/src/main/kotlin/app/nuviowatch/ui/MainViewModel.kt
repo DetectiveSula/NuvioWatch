@@ -492,6 +492,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             "Live connection" to if (prefs.settings.value.enabled) line("stream", "Not started yet") else "Off (turn on Watching alerts)",
             "Last live report received" to line("received", "None yet"),
             "Last live alert" to line("alert", "None yet"),
+            "Last summary" to line("summary", "None yet"),
             "Notification access here" to if (access) "Allowed" else "Not allowed",
             "Media reader here" to if (access) line("listener", "Not connected yet") else "Needs notification access",
             "Nuvio player here" to line("player", "Not seen yet"),

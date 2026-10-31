@@ -299,7 +299,8 @@ class LiveRuns(
 
         /** Heading and detail line: "Mum watched 3 episodes of X" / "S2 E1–E3 · 2h 05m". */
         fun summarize(who: String, run: LiveRun): Pair<String, String> {
-            val time = SessionTracker.formatShort(run.playedMs)
+            // No time when it wasn't timed (the report only said where they stopped).
+            val time = run.playedMs.takeIf { it > 0 }?.let { SessionTracker.formatShort(it) }
             val episodes = run.items.filter { it.subtitle != null }
             if (episodes.isEmpty()) {
                 val film = run.items.lastOrNull()
