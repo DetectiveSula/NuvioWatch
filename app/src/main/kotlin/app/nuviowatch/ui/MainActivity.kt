@@ -93,6 +93,7 @@ private fun MainScreen(state: UiState, vm: MainViewModel) {
 @Composable
 private fun MainScreenContent(state: UiState, vm: MainViewModel) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var fullScreen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val isTv = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) }
 
@@ -103,7 +104,7 @@ private fun MainScreenContent(state: UiState, vm: MainViewModel) {
             PullToRefreshBox(isRefreshing = state.loading, onRefresh = { vm.refresh() }, modifier = Modifier.fillMaxSize()) {
                 when (current) {
                     0 -> NowScreen(state, vm, onOpenSettings = { tab = SETTINGS_TAB })
-                    1 -> FamilyScreen(state, vm)
+                    1 -> androidx.compose.runtime.CompositionLocalProvider(LocalFullScreen provides { fullScreen = it }) { FamilyScreen(state, vm) }
                     2 -> StatsScreen(state)
                     else -> HistoryScreen(state)
                 }
@@ -114,7 +115,7 @@ private fun MainScreenContent(state: UiState, vm: MainViewModel) {
     if (isTv) {
         // TVs: tabs along the top, moved through with the remote, with a clear focus highlight.
         Column(Modifier.fillMaxSize().background(Ink)) {
-            TvNav(tabs, tab) { tab = it }
+            if (!fullScreen) TvNav(tabs, tab) { tab = it }
             Box(Modifier.weight(1f)) {
                 if (state.loading && state.snapshot.profiles.isEmpty()) {
                     CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -132,7 +133,7 @@ private fun MainScreenContent(state: UiState, vm: MainViewModel) {
         } else {
             Crossfade(targetState = tab, label = "tab") { content(it) }
         }
-        FloatingNav(tabs, tab, { tab = it }, Modifier.align(Alignment.BottomCenter))
+        if (!fullScreen) FloatingNav(tabs, tab, { tab = it }, Modifier.align(Alignment.BottomCenter))
     }
 }
 

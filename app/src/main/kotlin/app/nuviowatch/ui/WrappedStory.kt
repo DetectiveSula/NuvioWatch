@@ -63,6 +63,29 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle as DateTextStyle
 import java.util.Locale
 
+/** Lets a screen take over the whole display (hides the app's tab bar). */
+val LocalFullScreen = androidx.compose.runtime.compositionLocalOf<(Boolean) -> Unit> { {} }
+
+/** Hides the tab bar and the phone's status and navigation bars while on screen; swipe from the edge to see them. */
+@Composable
+private fun FullScreen() {
+    val setFullScreen = LocalFullScreen.current
+    val view = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        setFullScreen(true)
+        var ctx = view.context
+        while (ctx is android.content.ContextWrapper && ctx !is android.app.Activity) ctx = ctx.baseContext
+        val window = (ctx as? android.app.Activity)?.window
+        val bars = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, view) }
+        bars?.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        bars?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        onDispose {
+            bars?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            setFullScreen(false)
+        }
+    }
+}
+
 /** Wrapped for the whole year, instead of a month. */
 internal const val YEAR = -1
 
@@ -99,6 +122,7 @@ internal fun WrappedStory(state: UiState, monthsAgo: Int, onClose: () -> Unit) {
         }
     }
 
+    FullScreen()
     Box(Modifier.fillMaxSize().background(Ink)) {
         if (data == null) {
             Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {

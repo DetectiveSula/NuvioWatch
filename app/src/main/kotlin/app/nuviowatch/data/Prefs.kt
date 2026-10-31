@@ -136,6 +136,17 @@ class Prefs(context: Context) : SessionStore {
             .orEmpty()
         set(value) = prefs.edit { putString("live_devices", json.encodeToString(value)) }
 
+    /** What each device has watched so far, for the summary sent when it stops. */
+    var liveRuns: Map<String, app.nuviowatch.core.LiveRun>
+        get() = prefs.getString("live_runs", null)
+            ?.let { runCatching { json.decodeFromString<Map<String, app.nuviowatch.core.LiveRun>>(it) }.getOrNull() }
+            .orEmpty()
+        set(value) = prefs.edit { putString("live_runs", json.encodeToString(value)) }
+
+    /** When a profile's viewing was last summarised live, so the later Nuvio-sync summary isn't sent twice. */
+    fun liveCoveredAt(profile: Int): Long = prefs.getLong("live_covered_$profile", 0)
+    fun setLiveCoveredAt(profile: Int, at: Long) = prefs.edit { putLong("live_covered_$profile", at) }
+
     /** Last relay message read, so a reconnect picks up where it left off. */
     var liveSince: String?
         get() = prefs.getString("live_since", null)

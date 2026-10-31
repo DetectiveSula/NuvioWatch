@@ -5,6 +5,8 @@ import app.nuviowatch.core.Fun
 import app.nuviowatch.core.LiveChange
 import app.nuviowatch.core.Profile
 import app.nuviowatch.core.LiveEvent
+import app.nuviowatch.core.LiveRun
+import app.nuviowatch.core.LiveRuns
 import app.nuviowatch.core.LiveTracker
 import app.nuviowatch.core.PlayState
 import app.nuviowatch.graph
@@ -14,43 +16,86 @@ import app.nuviowatch.widget.NowWidget
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** Turns live reports from other devices into "started" / "stopped" alerts. */
+/** Turns live reports from other devices into "started watching" alerts and a summary the moment they stop. */
 object LiveReceiver {
     private val mutex = Mutex()
     private val tracker = LiveTracker()
+    private val runs = LiveRuns()
     private var restored = false
 
     suspend fun onEvent(context: Context, id: String, event: LiveEvent) = mutex.withLock {
         val prefs = context.graph.prefs
         restore(context)
         val change = tracker.apply(event)
+        val finished = runs.apply(event)
         prefs.liveDevices = tracker.states
+        prefs.liveRuns = runs.states
         prefs.liveSince = id
         // Replayed after a reconnect, or from this phone itself: not news.
         val fresh = System.currentTimeMillis() - event.at < FRESH_MS
         NowWidget.update(context)
         val ownDevice = event.deviceId == prefs.deviceId
-        if (change != null && fresh) {
+        if (change == LiveChange.STARTED && fresh) {
             if (ownDevice && !prefs.alertOwnDevice) {
                 prefs.setStatus("alert", "Skipped: playback on this device (turn on \"Also alert about this device\")")
             } else {
                 alert(context, event, change)
             }
         }
+        if (finished != null && fresh) summarize(context, finished)
+    }
+
+    /** "Mum watched 2 episodes of X", replacing their "started watching" alert. */
+    private suspend fun summarize(context: Context, run: LiveRun) {
+        val graph = context.graph
+        val prefs = graph.prefs
+        val id = Notifier.liveId(run.deviceId)
+        if (run.playedMs < LiveRuns.MIN_SUMMARY_MS) {
+            // Only a peek: take back the "started watching" alert.
+            Notifier.cancel(context, id)
+            return
+        }
+        val titles = graph.titles.titles.value
+        val asEvent = LiveEvent(run.deviceId, run.deviceName, run.profileIndex, run.title, state = PlayState.STOPPED, at = run.lastAt)
+        val profile = LiveHub.profileFor(asEvent, graph.repository.snapshot.value, titles)
+        // The Nuvio-sync summary for this viewing would only repeat it.
+        profile?.let { prefs.setLiveCoveredAt(it.index, System.currentTimeMillis()) }
+        val settings = prefs.settings.value
+        val skip = when {
+            run.deviceId == prefs.deviceId && !prefs.alertOwnDevice -> "playback on this device"
+            !settings.enabled -> "Watching alerts is off"
+            profile != null && (profile.index in settings.mutedProfiles || prefs.mutedUntil(profile.index) > System.currentTimeMillis()) -> "${profile.name} is muted"
+            !Notifier.canNotify(context) -> "notifications are blocked for Nuvio Watch"
+            else -> null
+        }
+        if (skip != null) {
+            prefs.setStatus("summary", "Skipped summary: $skip")
+            return
+        }
+        val who = profile?.name ?: "Someone on ${run.deviceName}"
+        val (heading, text) = LiveRuns.summarize(who, run)
+        val poster = Notifier.loadBitmap(context, LiveHub.titleFor(asEvent, titles)?.poster)
+        Notifier.showLiveSummary(context, id, heading, "$text · on ${run.deviceName}", profile?.index, profile?.name, poster, run.lastAt)
+        prefs.setStatus("summary", "Shown: $heading")
     }
 
     /** Devices that went silent while playing (e.g. switched off) count as stopped. */
     suspend fun expire(context: Context, nowMs: Long) = mutex.withLock {
         restore(context)
-        if (tracker.expire(nowMs).isNotEmpty()) {
+        val stale = tracker.expire(nowMs)
+        val finished = runs.expire(nowMs)
+        if (stale.isNotEmpty() || finished.isNotEmpty()) {
             context.graph.prefs.liveDevices = tracker.states
+            context.graph.prefs.liveRuns = runs.states
             NowWidget.update(context)
         }
+        finished.forEach { summarize(context, it) }
     }
 
     private fun restore(context: Context) {
         if (restored) return
         tracker.restore(context.graph.prefs.liveDevices)
+        runs.restore(context.graph.prefs.liveRuns)
         restored = true
     }
 
@@ -170,6 +215,7 @@ object LiveReceiver {
     fun reset() {
         restored = false
         tracker.restore(emptyMap())
+        runs.restore(emptyMap())
     }
 
     private const val FRESH_MS = 3 * 60_000L

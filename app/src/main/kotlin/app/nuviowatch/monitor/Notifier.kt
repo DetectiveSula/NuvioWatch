@@ -136,7 +136,7 @@ object Notifier {
         subtitleOverride: String? = null,
     ) {
         if (!canNotify(context)) return
-        val id = "live|${event.deviceId}".hashCode()
+        val id = liveId(event.deviceId)
         val subtitle = subtitleOverride ?: event.subtitle?.takeIf { it.isNotBlank() }
         val text = listOfNotNull(event.title, subtitle, "on ${event.deviceName}").joinToString(" · ")
         val channel = if (profileIndex != null && profileName != null) personChannel(context, profileIndex, profileName) else ALERTS
@@ -158,6 +158,35 @@ object Notifier {
         if (poster != null) builder.setLargeIcon(poster)
         if (profileIndex != null) {
             builder.addAction(0, "Mute today", MuteReceiver.intent(context, profileIndex, id))
+        }
+        @Suppress("MissingPermission")
+        NotificationManagerCompat.from(context).notify(id, builder.build())
+    }
+
+    fun liveId(deviceId: String) = "live|$deviceId".hashCode()
+
+    fun cancel(context: Context, id: Int) = NotificationManagerCompat.from(context).cancel(id)
+
+    /** What someone just watched, sent the moment they stop; replaces their "started watching" alert. */
+    fun showLiveSummary(context: Context, id: Int, heading: String, text: String, profileIndex: Int?, profileName: String?, poster: Bitmap?, at: Long) {
+        if (!canNotify(context)) return
+        val channel = if (profileIndex != null && profileName != null) personChannel(context, profileIndex, profileName) else ALERTS
+        val builder = NotificationCompat.Builder(context, channel)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(heading)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setColor(0xFFFF5C7A.toInt())
+            .setContentIntent(openApp(context))
+            .setAutoCancel(true)
+            .setWhen(at)
+            .setShowWhen(true)
+        if (poster != null) builder.setLargeIcon(poster)
+        if (profileIndex != null && profileName != null) {
+            builder.addAction(0, "Mute $profileName today", MuteReceiver.intent(context, profileIndex, id))
         }
         @Suppress("MissingPermission")
         NotificationManagerCompat.from(context).notify(id, builder.build())
