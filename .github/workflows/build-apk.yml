@@ -92,7 +92,7 @@ jobs:
             --notes "$(git log -1 --pretty=%B | grep -v -E '^(Co-Authored-By|Claude-Session):' | sed '/^$/N;/^\n$/D')" \
             --latest
 
-  mac-helper:
+  mac-app:
     needs: build
     runs-on: macos-latest
     env:
@@ -100,23 +100,51 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build the Mac helper (Intel + Apple silicon)
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Find Nuvio's public server key
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p build/NuvioWatch-Mac
-          swiftc -O -target arm64-apple-macos12 mac-helper/NuvioWatchHelper.swift -o build/helper-arm64
-          swiftc -O -target x86_64-apple-macos12 mac-helper/NuvioWatchHelper.swift -o build/helper-x86_64
-          lipo -create build/helper-arm64 build/helper-x86_64 -output build/NuvioWatch-Mac/nuvio-watch-helper
-          codesign --force --sign - build/NuvioWatch-Mac/nuvio-watch-helper
-          cp mac-helper/install.sh mac-helper/uninstall.sh build/NuvioWatch-Mac/
-          cd build && zip -r NuvioWatch-Mac.zip NuvioWatch-Mac
+          set +e
+          assets=$(gh release view --repo tapframe/NuvioStreaming --json assets --jq '.assets[].name' | grep -iE '\.apk$')
+          asset=$(echo "$assets" | grep -iE 'universal' | head -1)
+          [ -z "$asset" ] && asset=$(echo "$assets" | grep -iE 'arm64' | head -1)
+          [ -z "$asset" ] && asset=$(echo "$assets" | head -1)
+          if [ -n "$asset" ]; then
+            gh release download --repo tapframe/NuvioStreaming --pattern "$asset" --dir "$RUNNER_TEMP/nuvio"
+            python3 scripts/find_nuvio_key.py "$RUNNER_TEMP/nuvio/$asset" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build the Mac app
+        run: |
+          set -o pipefail
+          ./gradlew -PdesktopOnly=true :desktop:createDistributable --stacktrace 2>&1 | tee build.log
+          APP="desktop/build/compose/binaries/main/app/Nuvio Watch.app"
+          # Ad-hoc signature: macOS won't open an unsigned app at all on Apple silicon.
+          codesign --force --deep --sign - "$APP"
+          mkdir -p dmg
+          cp -R "$APP" dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "Nuvio Watch" -srcfolder dmg -ov -format UDZO NuvioWatch.dmg
+
+      - name: Report build errors
+        if: failure()
+        run: |
+          grep -E '^e: |error:|What went wrong|Caused by' -A2 build.log | grep -v '^\s*at ' | head -60 | while IFS= read -r line; do echo "::error::$line"; done
 
       - uses: actions/upload-artifact@v4
         with:
           name: NuvioWatch-Mac
-          path: build/NuvioWatch-Mac.zip
+          path: NuvioWatch.dmg
 
       - name: Attach to the release
         if: env.SIGNING_KEYSTORE_BASE64 != '' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "v1.0.${GITHUB_RUN_NUMBER}" build/NuvioWatch-Mac.zip --clobber
+        run: gh release upload "v1.0.${GITHUB_RUN_NUMBER}" NuvioWatch.dmg --clobber

@@ -15,4 +15,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "NuvioWatch"
-include(":app", ":core")
+include(":core", ":desktop")
+// The Mac build skips the Android app (it needs the Android SDK).
+if (!providers.gradleProperty("desktopOnly").isPresent) include(":app")
