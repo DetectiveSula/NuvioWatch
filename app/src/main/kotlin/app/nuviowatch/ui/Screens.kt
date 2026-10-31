@@ -443,9 +443,19 @@ private fun Hero(state: UiState, hero: ProfileNow?, tint: Color) {
                 if (live) {
                     LiveDot()
                     Spacer(Modifier.width(4.dp))
-                    Text("${hero.profile.name.uppercase()} · ACTIVE ${ago}", style = Eyebrow, color = Color(0xFFFFB3C1))
+                    Text(
+                        "${hero.profile.name.uppercase()} · ACTIVE ${ago}",
+                        style = Eyebrow,
+                        color = Color.White,
+                        modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xCC0A0910)).padding(horizontal = 10.dp, vertical = 5.dp),
+                    )
                 } else {
-                    Text("${hero.profile.name.uppercase()} WATCHED · $ago", style = Eyebrow, color = TextMuted)
+                    Text(
+                        "${hero.profile.name.uppercase()} WATCHED · $ago",
+                        style = Eyebrow,
+                        color = Color.White,
+                        modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xCC0A0910)).padding(horizontal = 10.dp, vertical = 5.dp),
+                    )
                 }
             }
             val name = info?.name ?: entry.contentId
@@ -495,15 +505,19 @@ private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (Strin
             Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // A solid pill, so it's readable on any poster.
+            Row(
+                Modifier.clip(RoundedCornerShape(50)).background(if (playing) LiveRed else Color(0xCC0A0910)).padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 if (playing) {
-                    LiveDot()
-                    Spacer(Modifier.width(4.dp))
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(Color.White))
+                    Spacer(Modifier.width(6.dp))
                 }
                 Text(
                     "${who.uppercase()} ${if (playing) "IS WATCHING" else "PAUSED"} · ${event.deviceName.uppercase()}",
                     style = Eyebrow,
-                    color = if (playing) Color(0xFFFFB3C1) else TextMuted,
+                    color = Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

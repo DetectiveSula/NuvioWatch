@@ -226,7 +226,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             recaps = local.recaps,
             episodes = local.episodes,
             social = local.social,
-            devices = local.liveDevices.values.sortedByDescending { it.at },
+            // One card per device: a reinstall or the new Mac app gives the same device a new id, so merge by name
+            // (newest wins) and drop devices not heard from in two weeks.
+            devices = local.liveDevices.values
+                .filter { local.clock - it.at < 14 * 86_400_000L }
+                .sortedByDescending { it.at }
+                .distinctBy { it.deviceName.trim().lowercase() },
             activeDays = local.activeDays,
             pendingWrapped = local.pendingWrapped,
             freezeDays = local.freezeDays,
