@@ -87,7 +87,8 @@ object Monitor {
                 if (tracker.isDue(session, now)) {
                     val profile = profiles.firstOrNull { it.index == index }
                     // Already summarised the moment they stopped, from live playback.
-                    val covered = prefs.liveCoveredAt(index) >= session.startedAt - LIVE_COVER_MS
+                    // (Nuvio uploads progress when they stop, so a live summary of the same viewing is sent close to its end.)
+                    val covered = prefs.liveCoveredAt(index) >= session.lastActivityAt - LIVE_COVER_MS
                     if (covered) prefs.setStatus("summary", "Sync summary skipped: already sent when they stopped")
                     val allowed = !covered && profile != null && index !in settings.mutedProfiles && prefs.mutedUntil(index) <= now
                     if (allowed) {
@@ -164,5 +165,5 @@ object Monitor {
 
     private const val MIN_GAP_MS = 15_000L
     private const val PROFILE_REFRESH_MS = 60 * 60_000L
-    private const val LIVE_COVER_MS = 30 * 60_000L
+    private const val LIVE_COVER_MS = 15 * 60_000L
 }

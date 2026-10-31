@@ -92,6 +92,7 @@ object Nudges {
      */
     fun announceStreaks(context: Context, snapshot: Snapshot) {
         val prefs = context.graph.prefs
+        if (snapshot.profiles.isEmpty()) return
         val all = viewings(snapshot, context)
         val activeDays = prefs.activeDays
         val freezeDays = prefs.freezeDays

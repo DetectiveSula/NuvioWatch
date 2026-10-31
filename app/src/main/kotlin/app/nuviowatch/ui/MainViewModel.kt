@@ -295,7 +295,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { e -> local.update { it.copy(loading = false, error = e.message) } }
     }
 
+    private var lastRefreshAt = 0L
+
+    /** Coming back to the app after a while: reload so stats and history aren't stale. */
+    fun refreshIfStale() {
+        if (prefs.signedIn.value && System.currentTimeMillis() - lastRefreshAt > 2 * 60_000L) refresh()
+    }
+
     fun refresh() = viewModelScope.launch {
+        lastRefreshAt = System.currentTimeMillis()
         local.update { it.copy(loading = true, error = null) }
         runCatching { graph.repository.refresh() }
             .onSuccess { snapshot ->

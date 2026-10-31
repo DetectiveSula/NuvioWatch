@@ -71,6 +71,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        viewModel.refreshIfStale()
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         openFrom(intent)

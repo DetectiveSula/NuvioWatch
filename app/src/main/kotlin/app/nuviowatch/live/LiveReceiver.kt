@@ -98,7 +98,9 @@ object LiveReceiver {
         val who = profile?.name ?: "Someone on ${run.deviceName}"
         val (heading, text) = LiveRuns.summarize(who, run)
         val poster = Notifier.loadBitmap(context, LiveHub.titleFor(asEvent, titles)?.poster)
-        Notifier.showLiveSummary(context, id, heading, "$text · on ${run.deviceName}", profile?.index, profile?.name, poster, run.lastAt)
+        // Its own notification, so the next "started watching" on this device doesn't replace it.
+        Notifier.cancel(context, id)
+        Notifier.showLiveSummary(context, "summary|${run.deviceId}|${run.startedAt}".hashCode(), heading, "$text · on ${run.deviceName}", profile?.index, profile?.name, poster, run.lastAt)
         prefs.setStatus("summary", "Shown: $heading")
     }
 
