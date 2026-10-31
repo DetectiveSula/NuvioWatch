@@ -108,7 +108,11 @@ fun FamilyScreen(state: UiState, vm: MainViewModel) {
 private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Unit, onStory: (Int) -> Unit) {
     val profiles = state.snapshot.profiles
     val indexes = profiles.map { it.index }
-    val board = remember(state.viewings, state.clock / 600_000) { Fun.leaderboard(state.viewings, indexes, state.clock) }
+    val bonus = remember(state.viewings, state.titles, state.episodes, state.clock / 3_600_000) {
+        Fun.challengeBonus(state.viewings, indexes, state.titles, state.episodes, state.clock)
+    }
+    val board = remember(state.viewings, bonus, state.clock / 600_000) { Fun.leaderboard(state.viewings, indexes, state.clock, bonus = bonus) }
+    val boardShare = rememberShareHandle()
     val champion = remember(state.viewings, state.clock / 3_600_000) { Fun.champion(state.viewings, indexes, state.clock) }
     val streaks = remember(state.viewings, state.clock / 3_600_000) {
         indexes.associateWith { i -> Fun.streaks(state.viewings.filter { it.profileIndex == i }, state.clock).first }
@@ -123,7 +127,7 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
 
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             // Weekly leaderboard
-            GlassCard(padding = 18.dp) {
+            GlassCard(Modifier.capturable(boardShare), padding = 18.dp) {
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text("THIS WEEK", style = Eyebrow, color = TextMuted, modifier = Modifier.weight(1f))
                     Text("Resets Monday", fontSize = 12.sp, color = TextMuted)
@@ -160,6 +164,16 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
                 )
             }
 
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                ShareButton(boardShare, "Share leaderboard", "This week's Nuvio leaderboard")
+            }
+
+            RouletteCard(state)
+            PartyCard(state, vm)
+            SuggestedCard(state)
+            ChallengesCard(state)
+            NewEpisodesCard(state)
+            BestRatedCard(state)
             PredictionsCard(state, vm)
 
             // Up next
@@ -173,9 +187,9 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
 
             // Wrapped
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                listOf(0, 1).forEach { monthsAgo ->
-                    val month = LocalDate.now().minusMonths(monthsAgo.toLong())
-                    val label = month.month.getDisplayName(DateTextStyle.FULL, Locale.getDefault())
+                listOf(0, 1, YEAR).forEach { monthsAgo ->
+                    val month = LocalDate.now().minusMonths(maxOf(monthsAgo, 0).toLong())
+                    val label = if (monthsAgo == YEAR) LocalDate.now().year.toString() else month.month.getDisplayName(DateTextStyle.SHORT, Locale.getDefault())
                     Column(
                         Modifier
                             .weight(1f)
@@ -184,7 +198,7 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
                             .clickable(role = Role.Button) { onStory(monthsAgo) }
                             .padding(16.dp),
                     ) {
-                        Text(if (monthsAgo == 0) "SO FAR" else "WRAPPED", style = Eyebrow, color = Color.White.copy(alpha = 0.8f))
+                        Text(if (monthsAgo == 1) "WRAPPED" else "SO FAR", style = Eyebrow, color = Color.White.copy(alpha = 0.8f))
                         Text(label, style = display(24), color = Color.White)
                         Text("Tap to play", fontSize = 12.sp, color = Color.White.copy(alpha = 0.85f))
                     }
@@ -208,9 +222,9 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             items(picks, key = { it.contentId }) { pick ->
                                 val info = state.titles[pick.contentId]
-                                val context = androidx.compose.ui.platform.LocalContext.current
+                                val openTitle = LocalOpenTitle.current
                                 val series = state.viewings.any { it.contentId == pick.contentId && it.series }
-                                Column(Modifier.width(120.dp).clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Open in Nuvio") { openInNuvio(context, pick.contentId, series) }) {
+                                Column(Modifier.width(120.dp).clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Open") { openTitle(pick.contentId, series) }) {
                                     Poster(info?.poster, width = 120.dp, corner = 14.dp)
                                     Spacer(Modifier.height(6.dp))
                                     Text(info?.name ?: pick.fallbackTitle, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -298,11 +312,11 @@ fun StreakAvatar(profile: Profile, streak: Int, crowned: Boolean, size: androidx
 
 @Composable
 private fun AbandonedRow(a: AbandonedTitle, state: UiState, showProfile: Boolean) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val openTitle = LocalOpenTitle.current
     val info = state.titles[a.contentId]
     val profile = state.profile(a.profileIndex)
     Row(
-        Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open in Nuvio") { openInNuvio(context, a.contentId, a.season != null) }.padding(vertical = 8.dp),
+        Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open") { openTitle(a.contentId, a.season != null) }.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Poster(info?.poster, width = 36.dp, corner = 8.dp)
@@ -321,7 +335,7 @@ private fun AbandonedRow(a: AbandonedTitle, state: UiState, showProfile: Boolean
 
 @Composable
 private fun UpNextRow(u: UpNext, state: UiState, showProfile: Boolean) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val openTitle = LocalOpenTitle.current
     val info = state.titles[u.contentId]
     val profile = state.profile(u.profileIndex)
     val status = when {
@@ -330,7 +344,7 @@ private fun UpNextRow(u: UpNext, state: UiState, showProfile: Boolean) {
         else -> u.next.releasedMs?.let { airsIn(it, state.clock) } ?: "Coming soon"
     }
     Row(
-        Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open in Nuvio") { openInNuvio(context, u.contentId, series = true) }.padding(vertical = 8.dp),
+        Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open") { openTitle(u.contentId, true) }.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
@@ -628,10 +642,12 @@ private fun BadgeTile(b: BadgeProgress, modifier: Modifier) {
 
 @Composable
 private fun WrappedStory(state: UiState, monthsAgo: Int, onClose: () -> Unit) {
-    val month = LocalDate.now().minusMonths(monthsAgo.toLong()).withDayOfMonth(1)
-    val label = month.month.getDisplayName(DateTextStyle.FULL, Locale.getDefault())
+    val year = monthsAgo == YEAR
+    val start = if (year) LocalDate.now().withDayOfYear(1) else LocalDate.now().minusMonths(monthsAgo.toLong()).withDayOfMonth(1)
+    val end = if (year) start.plusYears(1) else start.plusMonths(1)
+    val label = if (year) start.year.toString() else start.month.getDisplayName(DateTextStyle.FULL, Locale.getDefault())
     val wrapped = remember(state.viewings, state.titles, monthsAgo) {
-        Fun.wrapped(state.viewings, state.titles, month, month.plusMonths(1), label)
+        Fun.wrapped(state.viewings, state.titles, start, end, label)
     }
     val slides = remember(wrapped) { wrapped?.let { slidesFor(it, state) } ?: emptyList() }
     val pager = rememberPagerState { slides.size.coerceAtLeast(1) }
@@ -650,6 +666,7 @@ private fun WrappedStory(state: UiState, monthsAgo: Int, onClose: () -> Unit) {
         HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { i ->
             val slide = slides[i]
             val bg = colors[i % colors.size]
+            val share = rememberShareHandle()
             Box(
                 Modifier
                     .fillMaxSize()
@@ -660,7 +677,11 @@ private fun WrappedStory(state: UiState, monthsAgo: Int, onClose: () -> Unit) {
                     .statusBarsPadding()
                     .padding(28.dp),
             ) {
-                Column(Modifier.align(Alignment.CenterStart), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.align(Alignment.BottomStart)) { ShareButton(share, "Share this", "Family Wrapped · $label") }
+                Column(
+                    Modifier.align(Alignment.CenterStart).capturable(share).background(Brush.verticalGradient(listOf(bg, Ink))).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     Text(slide.eyebrow.uppercase(), style = Eyebrow, color = Color.White.copy(alpha = 0.8f))
                     slide.poster?.let { Poster(it, width = 140.dp, corner = 16.dp) }
                     if (slide.big.isNotEmpty()) Text(slide.big, style = display(if (slide.big.length > 14) 40 else 64), color = Color.White)
@@ -709,6 +730,255 @@ private fun slidesFor(w: Wrapped, state: UiState): List<Slide> {
             add(Slide("Busiest day", day.format(DateTimeFormatter.ofPattern("EEE d MMM")), "${formatDuration(ms)} watched in a single day."))
         }
         w.topGenre?.let { add(Slide("Family favourite genre", it, "The house just can't get enough.")) }
+        w.firstTitle?.takeIf { w.label.length == 4 }?.let { (id, at) ->
+            val day = java.time.Instant.ofEpochMilli(at).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            add(Slide("First watch of the year", "", "${title(id)}\non ${day.format(DateTimeFormatter.ofPattern("d MMMM"))}", poster = state.titles[id]?.poster))
+        }
+        w.longestStreak?.let { (i, days) -> add(Slide("Longest streak", "$days days", "${name(i)} watched something $days days in a row. 🔥")) }
         add(Slide("The final ranking", "", "", list = w.perProfile.map { (i, ms) -> name(i) to formatDuration(ms) }))
     }
+}
+
+/** Wrapped for the whole year, instead of a month. */
+private const val YEAR = -1
+
+// ---------------------------------------------------------------- What should we watch?
+
+@Composable
+private fun RouletteCard(state: UiState) {
+    val profiles = state.snapshot.profiles
+    var who by rememberSaveable { mutableStateOf(listOfNotNull(state.device.profileIndex)) }
+    var result by remember { mutableStateOf<app.nuviowatch.core.RouletteOption?>(null) }
+    var spinning by remember { mutableStateOf(false) }
+    val openTitle = LocalOpenTitle.current
+    val scope = rememberCoroutineScope()
+    val names = profiles.associate { it.index to it.name }
+    val options = remember(who, state.viewings, state.social.ratings) {
+        Fun.roulette(who.toSet(), state.viewings, state.social.ratings, names = names)
+    }
+    GlassCard(padding = 18.dp) {
+        SectionTitle("🎲 What should we watch?")
+        Text("Who's watching?", fontSize = 12.sp, color = TextMuted)
+        Spacer(Modifier.height(6.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            profiles.forEach { p ->
+                SmallChoice(p.name, p.index in who) { who = if (p.index in who) who - p.index else who + p.index; result = null }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        val shown = result
+        if (shown != null) {
+            val info = state.titles[shown.contentId]
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0x14FFFFFF)).clickable { openTitle(shown.contentId, shown.series) }.padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Poster(info?.poster, width = 54.dp, corner = 10.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(info?.name ?: shown.fallbackTitle, style = display(20), maxLines = 2)
+                    Text(shown.reason, fontSize = 12.sp, color = TextMuted)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+        Text(
+            when {
+                who.isEmpty() -> "Pick who's watching"
+                options.isEmpty() -> "Nothing to suggest for this group yet"
+                spinning -> "Spinning…"
+                result == null -> "🎲 Spin"
+                else -> "🎲 Spin again"
+            },
+            modifier = Modifier.clip(RoundedCornerShape(50)).background(if (options.isNotEmpty() && !spinning) Color.White else Color(0x14FFFFFF))
+                .clickable(enabled = options.isNotEmpty() && !spinning, role = Role.Button) {
+                    scope.launch {
+                        spinning = true
+                        // A quick shuffle through the options, slowing down, before landing on one.
+                        repeat(10) { n ->
+                            result = options.random()
+                            kotlinx.coroutines.delay(60L + n * 25L)
+                        }
+                        spinning = false
+                    }
+                }
+                .padding(horizontal = 18.dp, vertical = 10.dp),
+            color = if (options.isNotEmpty() && !spinning) Ink else TextMuted,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+// ---------------------------------------------------------------- Watch party
+
+@Composable
+private fun PartyCard(state: UiState, vm: MainViewModel) {
+    var link by rememberSaveable { mutableStateOf("") }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    GlassCard(padding = 18.dp) {
+        SectionTitle("🎉 Watch party")
+        Text(
+            "Start a watch party in Nuvio, copy its link, then send it here. Everyone gets a notification with a Join button that opens Nuvio in sync.",
+            fontSize = 13.sp,
+            color = TextMuted,
+        )
+        Spacer(Modifier.height(10.dp))
+        androidx.compose.material3.OutlinedTextField(
+            value = link,
+            onValueChange = { link = it },
+            singleLine = true,
+            placeholder = { Text("Party link or code") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+            androidx.compose.material3.OutlinedButton(onClick = { clipboard.getText()?.text?.let { link = it } }) { Text("Paste") }
+            androidx.compose.material3.Button(
+                onClick = { vm.shareParty(link, state.liveNow.firstOrNull { it.event.deviceId == state.social.myDeviceId }?.let { it.info?.name ?: it.event.title }); link = "" },
+                enabled = link.isNotBlank(),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Ink),
+            ) { Text("Send to family") }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Suggested for you
+
+@Composable
+private fun SuggestedCard(state: UiState) {
+    val me = state.device.profileIndex ?: return
+    val openTitle = LocalOpenTitle.current
+    val mine = state.social.suggestions.filter { it.toProfile == me }
+        .filter { s -> state.viewings.none { it.profileIndex == me && it.contentId == s.contentId } }
+        .distinctBy { it.contentId }.takeLast(10).reversed()
+    if (mine.isEmpty()) return
+    GlassCard(padding = 18.dp) {
+        SectionTitle("💡 Suggested for you")
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(mine, key = { it.id }) { s ->
+                Column(Modifier.width(110.dp).clip(RoundedCornerShape(14.dp)).clickable { openTitle(s.contentId, s.series) }) {
+                    Poster(state.titles[s.contentId]?.poster, width = 110.dp, corner = 14.dp)
+                    Text(s.title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+                    Text("from ${s.fromName}", fontSize = 11.sp, color = TextMuted)
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Monthly challenges
+
+@Composable
+private fun ChallengesCard(state: UiState) {
+    val month = java.time.YearMonth.now()
+    val challenges = remember(month) { Fun.challengesFor(month) }
+    val profiles = state.snapshot.profiles
+    if (profiles.isEmpty()) return
+    GlassCard(padding = 18.dp) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text("CHALLENGES · ${month.month.getDisplayName(DateTextStyle.FULL, Locale.getDefault()).uppercase()}", style = Eyebrow, color = TextMuted, modifier = Modifier.weight(1f))
+            Text("+20 pts each", fontSize = 12.sp, color = Color(0xFFFFD166))
+        }
+        challenges.forEach { c ->
+            Spacer(Modifier.height(14.dp))
+            Text("${c.emoji} ${c.title}", fontWeight = FontWeight.SemiBold)
+            Text(c.goalText, fontSize = 12.sp, color = TextMuted)
+            Spacer(Modifier.height(6.dp))
+            profiles.forEach { p ->
+                val progress = remember(state.viewings, state.titles, state.episodes, p.index, c) {
+                    Fun.challengeProgress(c, state.viewings.filter { it.profileIndex == p.index }, state.titles, state.episodes, month)
+                }
+                Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(p.name, Modifier.width(76.dp), fontSize = 12.sp, maxLines = 1)
+                    Box(Modifier.weight(1f)) {
+                        ThinProgress(progress.fraction, if (progress.done) Color(0xFF7CE0C3) else Accent, height = 6.dp, track = Color(0x14FFFFFF))
+                    }
+                    Text(if (progress.done) " ✓" else " ${minOf(progress.count, c.goal)}/${c.goal}", fontSize = 12.sp, modifier = Modifier.width(40.dp), color = if (progress.done) Color(0xFF7CE0C3) else TextMuted)
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- New episodes
+
+@Composable
+private fun NewEpisodesCard(state: UiState) {
+    val zone = java.time.ZoneId.systemDefault()
+    val today = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()
+    val upcoming = remember(state.viewings, state.episodes, today) {
+        Fun.newEpisodes(state.viewings, state.episodes, today - 86_400_000L, today + 8 * 86_400_000L, state.clock)
+    }
+    if (upcoming.isEmpty()) return
+    val openTitle = LocalOpenTitle.current
+    GlassCard(padding = 18.dp) {
+        SectionTitle("🆕 New episodes this week")
+        upcoming.take(10).forEach { a ->
+            val info = state.titles[a.contentId]
+            val day = java.time.Instant.ofEpochMilli(a.episode.releasedMs!!).atZone(zone).toLocalDate()
+            val whenText = when (day) {
+                LocalDate.now(zone) -> "Today"
+                LocalDate.now(zone).minusDays(1) -> "Yesterday"
+                LocalDate.now(zone).plusDays(1) -> "Tomorrow"
+                else -> day.dayOfWeek.getDisplayName(DateTextStyle.FULL, Locale.getDefault())
+            }
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { openTitle(a.contentId, true) }.padding(vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Poster(info?.poster, width = 34.dp, corner = 8.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(info?.name ?: a.contentId, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        listOfNotNull(episodeLabel(a.episode.season, a.episode.episode), a.followers.joinToString { state.profileName(it) }).joinToString(" · "),
+                        fontSize = 12.sp,
+                        color = TextMuted,
+                        maxLines = 1,
+                    )
+                }
+                Pill(whenText, if (whenText == "Today") Color(0xFF7CE0C3) else Color(0xFFC3CAFF))
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Best rated
+
+@Composable
+private fun BestRatedCard(state: UiState) {
+    val openTitle = LocalOpenTitle.current
+    val since = state.clock - 30 * 86_400_000L
+    val best = remember(state.social.ratings, state.clock / 3_600_000) {
+        state.social.ratings.filter { it.at >= since }.map { it.contentId }.distinct()
+            .mapNotNull { id -> app.nuviowatch.core.Social.familyScore(id, state.social.ratings)?.let { id to it } }
+            .sortedByDescending { it.second.first }.take(8)
+    }
+    if (best.isEmpty()) return
+    GlassCard(padding = 18.dp) {
+        SectionTitle("⭐ Best rated this month")
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(best, key = { it.first }) { (id, score) ->
+                val series = state.viewings.any { it.contentId == id && it.series }
+                Column(Modifier.width(100.dp).clip(RoundedCornerShape(14.dp)).clickable { openTitle(id, series) }) {
+                    Poster(state.titles[id]?.poster, width = 100.dp, corner = 14.dp)
+                    Text("★ %.1f".format(score.first), color = Color(0xFFFFD166), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+                    Text(state.titles[id]?.name ?: id, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmallChoice(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        modifier = Modifier.clip(RoundedCornerShape(50))
+            .background(if (selected) Color.White else Color(0x1FFFFFFF))
+            .clickable(role = Role.Checkbox, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        color = if (selected) Ink else TextPrimary,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+    )
 }

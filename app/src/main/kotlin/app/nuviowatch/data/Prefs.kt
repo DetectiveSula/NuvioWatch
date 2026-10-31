@@ -6,7 +6,10 @@ import app.nuviowatch.core.NuvioClient
 import app.nuviowatch.core.ProgressEntry
 import app.nuviowatch.core.ServerConfig
 import app.nuviowatch.core.Session
+import app.nuviowatch.core.Comment
 import app.nuviowatch.core.LiveEvent
+import app.nuviowatch.core.Rating
+import app.nuviowatch.core.Suggestion
 import app.nuviowatch.core.Prediction
 import app.nuviowatch.core.Reaction
 import app.nuviowatch.core.Vote
@@ -170,7 +173,23 @@ class Prefs(context: Context) : SessionStore {
     fun myName(profiles: List<app.nuviowatch.core.Profile>): String =
         deviceProfile?.let { index -> profiles.firstOrNull { it.index == index }?.name } ?: deviceName
 
-        /** Newest database message already fetched (epoch ms). */
+        var suggestions: List<Suggestion>
+        get() = prefs.getString("suggestions", null)?.let { runCatching { json.decodeFromString<List<Suggestion>>(it) }.getOrNull() }.orEmpty()
+        set(value) = prefs.edit { putString("suggestions", json.encodeToString(value.takeLast(100))) }
+
+    var ratings: List<Rating>
+        get() = prefs.getString("ratings", null)?.let { runCatching { json.decodeFromString<List<Rating>>(it) }.getOrNull() }.orEmpty()
+        set(value) = prefs.edit { putString("ratings", json.encodeToString(value.takeLast(1000))) }
+
+    var comments: List<Comment>
+        get() = prefs.getString("comments", null)?.let { runCatching { json.decodeFromString<List<Comment>>(it) }.getOrNull() }.orEmpty()
+        set(value) = prefs.edit { putString("comments", json.encodeToString(value.takeLast(1000))) }
+
+    /** Small "already done" markers (rating prompts, episode and challenge announcements). */
+    fun isMarked(key: String) = prefs.getBoolean("mark_$key", false)
+    fun mark(key: String) = prefs.edit { putBoolean("mark_$key", true) }
+
+    /** Newest database message already fetched (epoch ms). */
     var dbSince: Long?
         get() = prefs.getLong("db_since", -1).takeIf { it >= 0 }
         set(value) = prefs.edit { putLong("db_since", value ?: -1) }

@@ -90,6 +90,17 @@ object Monitor {
                         val poster = lines.firstOrNull()?.let { graph.titles[it.contentId]?.poster }
                         Notifier.showSummary(context, profile, session, lines, Notifier.loadBitmap(context, poster))
                     }
+                    // Ask the person who watched (on their own phone) how it was.
+                    if (index == prefs.deviceProfile) {
+                        session.items.filter { it.completed }.distinctBy { it.contentId }.forEach { item ->
+                            val key = "rate|$index|${item.contentId}"
+                            if (!prefs.isMarked(key)) {
+                                graph.titles.ensure(item.contentId, item.series)
+                                Notifier.showRatePrompt(context, index, item.contentId, graph.titles[item.contentId]?.name ?: item.contentId)
+                                prefs.mark(key)
+                            }
+                        }
+                    }
                     sessions[index] = session.copy(notifiedAt = now)
                 }
                 if (tracker.isExpired(session, now)) sessions.remove(index)

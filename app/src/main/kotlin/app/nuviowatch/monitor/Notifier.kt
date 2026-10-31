@@ -17,6 +17,10 @@ import androidx.core.graphics.drawable.toBitmap
 import app.nuviowatch.R
 import app.nuviowatch.core.Digest
 import app.nuviowatch.core.Badge
+import app.nuviowatch.core.Comment
+import app.nuviowatch.core.Party
+import app.nuviowatch.core.Suggestion
+import app.nuviowatch.core.episodeLabel
 import app.nuviowatch.core.LiveEvent
 import app.nuviowatch.core.Ping
 import app.nuviowatch.core.Prediction
@@ -246,6 +250,64 @@ object Notifier {
         @Suppress("MissingPermission")
         NotificationManagerCompat.from(context).notify(id, builder.build())
     }
+
+    private fun simple(context: Context, id: Int, title: String, text: String, channel: String = ALERTS, configure: NotificationCompat.Builder.() -> Unit = {}) {
+        if (!canNotify(context)) return
+        val builder = NotificationCompat.Builder(context, channel)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(openApp(context))
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+        builder.configure()
+        @Suppress("MissingPermission")
+        NotificationManagerCompat.from(context).notify(id, builder.build())
+    }
+
+    private fun viewIntent(context: Context, uri: String, requestCode: Int): PendingIntent = PendingIntent.getActivity(
+        context,
+        requestCode,
+        Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    fun showParty(context: Context, p: Party) {
+        val id = p.id.hashCode()
+        simple(context, id, "🎉 ${p.fromName} started a watch party", listOfNotNull(p.title, "Tap Join to watch in sync in Nuvio").joinToString(" · ")) {
+            setContentIntent(viewIntent(context, "nuvio://party/${p.code}", id))
+            addAction(0, "Join", viewIntent(context, "nuvio://party/${p.code}", id + 1))
+        }
+    }
+
+    fun showSuggestion(context: Context, s: Suggestion) {
+        val id = s.id.hashCode()
+        simple(context, id, "💡 ${s.fromName} thinks you'd love ${s.title}", "Tap to open it in Nuvio") {
+            val uri = "nuvio://meta?type=${if (s.series) "series" else "movie"}&id=${android.net.Uri.encode(s.contentId)}"
+            setContentIntent(viewIntent(context, uri, id))
+        }
+    }
+
+    fun showSuggestionStarted(context: Context, who: String, title: String) =
+        simple(context, "suggest-started|$who|$title".hashCode(), "👀 $who started $title", "The one you suggested!")
+
+    fun showComment(context: Context, c: Comment, title: String?) =
+        simple(context, c.id.hashCode(), "💬 ${c.fromName} on ${title ?: "a show you watch"}", listOfNotNull(episodeLabel(c.season, c.episode), c.text).joinToString(": "))
+
+    /** "Rate it": three quick answers right from the notification. */
+    fun showRatePrompt(context: Context, profileIndex: Int, contentId: String, title: String) {
+        val id = "rate|$profileIndex|$contentId".hashCode()
+        simple(context, id, "⭐ How was $title?", "Rate it for the family score") {
+            listOf(5 to "😍 Loved", 4 to "🙂 Good", 2 to "😐 Meh").forEach { (stars, label) ->
+                addAction(0, label, RateReceiver.intent(context, profileIndex, contentId, stars, id))
+            }
+        }
+    }
+
+    fun showNewEpisode(context: Context, show: String, label: String) =
+        simple(context, "ep|$show|$label".hashCode(), "🆕 New episode of $show today", label, RECAPS)
 
     fun showReaction(context: Context, r: Reaction) {
         if (!canNotify(context)) return

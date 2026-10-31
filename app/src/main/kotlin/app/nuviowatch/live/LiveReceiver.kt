@@ -85,7 +85,10 @@ object LiveReceiver {
             profileName = profile?.name,
             subtitleOverride = if (ahead > 0) "⚠️ $ahead episode${if (ahead == 1) "" else "s"} ahead of you, episode hidden" else null,
         )
-        if (change == LiveChange.STARTED && profile != null) sameShow(context, event, profile)
+        if (change == LiveChange.STARTED && profile != null) {
+            sameShow(context, event, profile)
+            suggestionStarted(context, event, profile)
+        }
         prefs.setStatus("alert", "Shown: $who ${if (change == LiveChange.STARTED) "started" else "stopped"} watching")
     }
 
@@ -150,6 +153,18 @@ object LiveReceiver {
             val where = app.nuviowatch.core.episodeLabel(entry.season, entry.episode)?.let { " (on $it)" }.orEmpty()
             Notifier.showSameShow(context, "${other.name} is watching $name too", "${other.name} watched it recently$where. Watch the next one together?", ask, askName, name)
         }
+    }
+
+    /** "Ishti started X", for whoever suggested it to her. */
+    private fun suggestionStarted(context: Context, event: LiveEvent, watcher: Profile) {
+        val prefs = context.graph.prefs
+        val me = prefs.deviceProfile ?: return
+        val contentId = LiveHub.titleIdFor(event, context.graph.titles.titles.value) ?: return
+        val suggestion = prefs.suggestions.lastOrNull { it.toProfile == watcher.index && it.contentId == contentId && it.fromProfile == me } ?: return
+        val key = "suggest-started|${suggestion.id}"
+        if (prefs.isMarked(key)) return
+        prefs.mark(key)
+        Notifier.showSuggestionStarted(context, watcher.name, suggestion.title)
     }
 
     fun reset() {

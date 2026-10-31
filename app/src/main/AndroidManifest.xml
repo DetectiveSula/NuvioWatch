@@ -26,6 +26,10 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="nuvio" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
     </queries>
 
     <application
@@ -110,6 +114,10 @@
 
         <receiver
             android:name=".monitor.TogetherReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".monitor.RateReceiver"
             android:exported="false" />
 
         <receiver

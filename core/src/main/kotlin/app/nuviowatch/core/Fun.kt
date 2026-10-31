@@ -71,6 +71,27 @@ data class UpNext(
     val lastAtMs: Long,
 )
 
+/** Something to watch together, and why. */
+data class RouletteOption(val contentId: String, val fallbackTitle: String, val series: Boolean, val reason: String)
+
+/** A new episode of a series someone follows. */
+data class EpisodeAlert(val contentId: String, val episode: EpisodeInfo, val followers: List<Int>)
+
+/** A monthly challenge; three are picked each month. */
+enum class Challenge(val emoji: String, val title: String, val goalText: String, val goal: Int) {
+    GENRE_FILMS("🎬", "Genre hopper", "Finish 3 films from different genres", 3),
+    COMEBACK("🔁", "Comeback", "Finish something you left for 3+ weeks", 1),
+    REGULAR("📅", "Regular", "Watch on 10 different days", 10),
+    SOMETHING_NEW("🧭", "Something new", "Watch a genre you've never watched before", 1),
+    SEASON("🏁", "Season finisher", "Finish a whole season", 1),
+    VARIETY("📺", "Variety", "Watch 5 different titles", 5),
+}
+
+data class ChallengeProgress(val challenge: Challenge, val count: Int, val completedAt: Long?) {
+    val done: Boolean get() = completedAt != null
+    val fraction: Float get() = (count.toFloat() / challenge.goal).coerceAtMost(1f)
+}
+
 /** Wrapped-style story for a month or a year. */
 data class Wrapped(
     val label: String,
@@ -84,6 +105,10 @@ data class Wrapped(
     val busiestDay: Pair<LocalDate, Long>?,
     val longestBinge: Triple<Int, String, Int>?,
     val perProfile: List<Pair<Int, Long>>,
+    /** The first thing watched in the period (content id, when). */
+    val firstTitle: Pair<String, Long>? = null,
+    /** Longest run of days anyone watched in the period (profile, days). */
+    val longestStreak: Pair<Int, Int>? = null,
 )
 
 /** Games and personality features, all worked out from viewing history. */
@@ -147,6 +172,7 @@ object Fun {
         nowMs: Long,
         zone: ZoneId = ZoneId.systemDefault(),
         weeksAgo: Long = 0,
+        bonus: Map<Int, Int> = emptyMap(),
     ): List<LeaderboardEntry> {
         val start = weekStart(nowMs, zone).minusWeeks(weeksAgo)
         val from = start.toInstant().toEpochMilli()
@@ -161,7 +187,7 @@ object Fun {
             val streak = streaks(mine.filter { it.atMs <= end }, end, zone).first
             LeaderboardEntry(
                 profileIndex = index,
-                points = (watched / 600_000).toInt() + finishedEpisodes * 3 + finishedFilms * 10 + streak * 5,
+                points = (watched / 600_000).toInt() + finishedEpisodes * 3 + finishedFilms * 10 + streak * 5 + (bonus[index] ?: 0),
                 watchedMs = watched,
                 finished = finishedEpisodes + finishedFilms,
                 streak = streak,
@@ -290,6 +316,122 @@ object Fun {
             )
     }
 
+    // ------------------------------------------------------------ Roulette
+
+    /**
+     * Ideas for [viewers] to watch together: things they're part-way through,
+     * then things one of them loved (finished or rated 4+) that others haven't seen.
+     */
+    fun roulette(viewers: Set<Int>, viewings: List<Viewing>, ratings: List<Rating> = emptyList(), limit: Int = 12, names: Map<Int, String> = emptyMap()): List<RouletteOption> {
+        fun name(i: Int) = names[i] ?: "Someone"
+        val byTitle = viewings.filter { it.profileIndex in viewers }.groupBy { it.contentId }
+        val options = mutableListOf<Pair<RouletteOption, Double>>()
+        for ((id, vs) in byTitle) {
+            val who = vs.map { it.profileIndex }.toSet()
+            val latest = vs.maxBy { it.atMs }
+            val unfinished = !latest.completed || latest.series
+            val loved = vs.filter { v -> v.completed && (!v.series || vs.count { it.profileIndex == v.profileIndex && it.completed } >= 3) }.map { it.profileIndex }.toSet() +
+                ratings.filter { it.contentId == id && it.stars >= 4 && it.profileIndex in viewers }.map { it.profileIndex }
+            val unseen = viewers - who
+            when {
+                who.size >= 2 && unfinished -> options += RouletteOption(id, latest.fallbackTitle, latest.series, "${who.joinToString(" and ") { name(it) }} are both on it") to (3.0 + who.size)
+                loved.isNotEmpty() && unseen.isNotEmpty() -> options += RouletteOption(
+                    id, latest.fallbackTitle, latest.series,
+                    "${name(loved.first())} loved it; ${unseen.joinToString(" and ") { name(it) }} ${if (unseen.size == 1) "hasn't" else "haven't"} seen it",
+                ) to (2.0 + loved.size)
+                unfinished && latest.fraction in 0.05f..0.95f -> options += RouletteOption(id, latest.fallbackTitle, latest.series, "${name(latest.profileIndex)} left it at ${(latest.fraction * 100).toInt()}%") to 1.0
+                unfinished && latest.series -> options += RouletteOption(id, latest.fallbackTitle, true, "${name(latest.profileIndex)} is following it") to 0.8
+            }
+        }
+        return options.sortedByDescending { it.second }.map { it.first }.distinctBy { it.contentId }.take(limit)
+    }
+
+    // ------------------------------------------------------------ New episodes
+
+    /** Episodes released in [fromMs, toMs) of series anyone watched in the last [activeDays]. */
+    fun newEpisodes(viewings: List<Viewing>, episodes: Map<String, List<EpisodeInfo>>, fromMs: Long, toMs: Long, nowMs: Long, activeDays: Long = 90): List<EpisodeAlert> {
+        val since = nowMs - activeDays * 86_400_000L
+        val followers = viewings.filter { it.series && it.atMs >= since }.groupBy { it.contentId }.mapValues { (_, vs) -> vs.map { it.profileIndex }.distinct() }
+        return followers.flatMap { (id, who) ->
+            episodes[id].orEmpty().filter { e -> e.releasedMs != null && e.releasedMs >= fromMs && e.releasedMs < toMs }.map { EpisodeAlert(id, it, who) }
+        }.sortedBy { it.episode.releasedMs }
+    }
+
+    // ------------------------------------------------------------ Monthly challenges
+
+    /** Three challenges for the month, rotating through the list. */
+    fun challengesFor(month: java.time.YearMonth): List<Challenge> {
+        val all = Challenge.entries
+        val start = (month.year * 12 + month.monthValue) % all.size
+        return (0 until 3).map { all[(start + it * 2) % all.size] }.distinct()
+    }
+
+    fun challengeProgress(
+        challenge: Challenge,
+        mine: List<Viewing>,
+        titles: Map<String, TitleInfo>,
+        episodes: Map<String, List<EpisodeInfo>>,
+        month: java.time.YearMonth,
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): ChallengeProgress {
+        val from = month.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val until = month.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val inMonth = mine.filter { it.atMs in from until until && it.watchedMs > 0 }.sortedBy { it.atMs }
+        fun reach(goal: Int, steps: List<Long>) = ChallengeProgress(challenge, steps.size, steps.getOrNull(goal - 1))
+        return when (challenge) {
+            Challenge.GENRE_FILMS -> {
+                val genres = mutableSetOf<String>()
+                val steps = inMonth.filter { !it.series && it.completed }.mapNotNull { v ->
+                    titles[v.contentId]?.genres?.firstOrNull { it !in genres }?.let { genres += it; v.atMs }
+                }
+                reach(3, steps)
+            }
+            Challenge.COMEBACK -> {
+                val steps = inMonth.filter { it.completed }.mapNotNull { v ->
+                    val before = mine.filter { it.contentId == v.contentId && it.atMs < v.atMs }.maxOfOrNull { it.atMs }
+                    v.atMs.takeIf { before != null && v.atMs - before >= 21 * 86_400_000L }
+                }
+                reach(1, steps)
+            }
+            Challenge.REGULAR -> reach(10, inMonth.distinctBy { date(it.atMs, zone) }.map { it.atMs })
+            Challenge.SOMETHING_NEW -> {
+                val known = mine.filter { it.atMs < from }.flatMap { titles[it.contentId]?.genres.orEmpty() }.toSet()
+                reach(1, inMonth.filter { v -> titles[v.contentId]?.genres.orEmpty().any { it !in known } }.map { it.atMs })
+            }
+            Challenge.SEASON -> {
+                val steps = inMonth.filter { it.series && it.completed && it.season != null }.groupBy { it.contentId to it.season!! }.mapNotNull { (key, vs) ->
+                    val season = episodes[key.first].orEmpty().filter { it.season == key.second && (it.releasedMs ?: 0) <= until }
+                    val done = mine.filter { it.contentId == key.first && it.season == key.second && it.completed }.mapNotNull { it.episode }.toSet()
+                    vs.maxOf { it.atMs }.takeIf { season.isNotEmpty() && season.all { it.episode in done } }
+                }.sorted()
+                reach(1, steps)
+            }
+            Challenge.VARIETY -> reach(5, inMonth.distinctBy { it.contentId }.map { it.atMs })
+        }
+    }
+
+    /** 20 leaderboard points for each challenge completed during the given week. */
+    fun challengeBonus(
+        viewings: List<Viewing>,
+        profiles: List<Int>,
+        titles: Map<String, TitleInfo>,
+        episodes: Map<String, List<EpisodeInfo>>,
+        nowMs: Long,
+        zone: ZoneId = ZoneId.systemDefault(),
+        weeksAgo: Long = 0,
+    ): Map<Int, Int> {
+        val start = weekStart(nowMs, zone).minusWeeks(weeksAgo)
+        val from = start.toInstant().toEpochMilli()
+        val until = start.plusWeeks(1).toInstant().toEpochMilli()
+        val months = setOf(java.time.YearMonth.from(start), java.time.YearMonth.from(start.plusDays(6)))
+        return profiles.associateWith { index ->
+            val mine = viewings.filter { it.profileIndex == index }
+            months.sumOf { month ->
+                challengesFor(month).count { c -> challengeProgress(c, mine, titles, episodes, month, zone).completedAt?.let { it in from until until } == true }
+            } * 20
+        }.filterValues { it > 0 }
+    }
+
     // ------------------------------------------------------------ Announcements
 
     /** Badges earned now that weren't in [alreadyAnnounced] (keys like "3|NIGHT_OWL"). */
@@ -374,6 +516,19 @@ object Fun {
             busiestDay = busiest,
             longestBinge = binge,
             perProfile = perProfile,
+            firstTitle = inRange.minByOrNull { it.atMs }?.let { it.contentId to it.atMs },
+            longestStreak = inRange.groupBy { it.profileIndex }.map { (p, vs) ->
+                val days = vs.map { date(it.atMs, zone) }.toSortedSet()
+                var best = 0
+                var run = 0
+                var prev: LocalDate? = null
+                for (d in days) {
+                    run = if (prev != null && prev.plusDays(1) == d) run + 1 else 1
+                    best = maxOf(best, run)
+                    prev = d
+                }
+                p to best
+            }.maxByOrNull { it.second }?.takeIf { it.second >= 2 },
         )
     }
 }

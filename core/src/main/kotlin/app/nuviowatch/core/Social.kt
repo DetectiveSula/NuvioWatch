@@ -36,6 +36,57 @@ data class Ping(
     val at: Long,
 )
 
+/** "Join my Nuvio watch party": opens Nuvio on the party's code. */
+@Serializable
+data class Party(
+    val type: String = "party",
+    val id: String,
+    val fromDeviceId: String,
+    val fromName: String,
+    val code: String,
+    val title: String? = null,
+    val at: Long,
+)
+
+/** "Mani thinks you'd love …" */
+@Serializable
+data class Suggestion(
+    val type: String = "suggest",
+    val id: String,
+    val fromName: String,
+    val fromProfile: Int? = null,
+    val toProfile: Int,
+    val contentId: String,
+    val series: Boolean,
+    val title: String,
+    val at: Long,
+)
+
+/** One person's 1–5 stars for a title; their latest rating counts. */
+@Serializable
+data class Rating(
+    val type: String = "rating",
+    val id: String,
+    val profileIndex: Int,
+    val contentId: String,
+    val stars: Int,
+    val at: Long,
+)
+
+/** A comment on a title, tied to the episode the writer had reached, so it can stay hidden from anyone behind. */
+@Serializable
+data class Comment(
+    val type: String = "comment",
+    val id: String,
+    val contentId: String,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val fromName: String,
+    val fromProfile: Int? = null,
+    val text: String,
+    val at: Long,
+)
+
 enum class PredictionKind { FINISH_SEASON, FINISH_FILM, WATCH_HOURS }
 
 /** "Will Mani finish season 6 by Sunday?" — settled automatically from Nuvio history. */
@@ -79,6 +130,10 @@ object Social {
             "prediction" -> json.decodeFromString<Prediction>(text)
             "vote" -> json.decodeFromString<Vote>(text)
             "ping" -> json.decodeFromString<Ping>(text)
+            "party" -> json.decodeFromString<Party>(text)
+            "suggest" -> json.decodeFromString<Suggestion>(text)
+            "rating" -> json.decodeFromString<Rating>(text)
+            "comment" -> json.decodeFromString<Comment>(text)
             else -> json.decodeFromString<LiveEvent>(text)
         }
     }.getOrNull()
@@ -88,6 +143,10 @@ object Social {
         is Prediction -> json.encodeToString(message)
         is Vote -> json.encodeToString(message)
         is Ping -> json.encodeToString(message)
+        is Party -> json.encodeToString(message)
+        is Suggestion -> json.encodeToString(message)
+        is Rating -> json.encodeToString(message)
+        is Comment -> json.encodeToString(message)
         is LiveEvent -> json.encodeToString(message)
         else -> error("Not a live message: $message")
     }
@@ -116,6 +175,30 @@ object Social {
         PredictionKind.FINISH_SEASON -> "Will $name finish ${title ?: "the show"} season ${p.season} by $deadline?"
         PredictionKind.FINISH_FILM -> "Will $name finish ${title ?: "the film"} by $deadline?"
         PredictionKind.WATCH_HOURS -> "Will $name watch ${p.hours}+ hours by $deadline?"
+    }
+
+    /** A Nuvio watch party code from a pasted link ("https://nuvio.tv/party/AB12CD", "nuvio://party/AB12CD") or a bare code. */
+    fun partyCode(input: String): String? {
+        val text = input.trim()
+        Regex("""party/([A-Za-z0-9_-]{3,64})""").find(text)?.let { return it.groupValues[1] }
+        return text.takeIf { Regex("""[A-Za-z0-9_-]{3,64}""").matches(it) }
+    }
+
+    /** Each person's latest stars for a title, and the family average (null if nobody has rated it). */
+    fun familyScore(contentId: String, ratings: List<Rating>): Pair<Double, Map<Int, Int>>? {
+        val latest = ratings.filter { it.contentId == contentId }.groupBy { it.profileIndex }.mapValues { (_, rs) -> rs.maxBy { it.at }.stars }
+        if (latest.isEmpty()) return null
+        return latest.values.average() to latest
+    }
+
+    /** Comments [viewer] can read without spoilers: films always, episodes up to where they've reached. */
+    fun visibleComments(comments: List<Comment>, contentId: String, reached: Pair<Int, Int>?): Pair<List<Comment>, Int> {
+        val all = comments.filter { it.contentId == contentId }.sortedBy { it.at }
+        val visible = all.filter { c ->
+            c.season == null || c.episode == null ||
+                (reached != null && (c.season < reached.first || (c.season == reached.first && c.episode <= reached.second)))
+        }
+        return visible to (all.size - visible.size)
     }
 
     /** Each voter's latest vote counts. */

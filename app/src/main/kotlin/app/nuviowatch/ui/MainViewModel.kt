@@ -10,7 +10,10 @@ import app.nuviowatch.data.Dashboard
 import app.nuviowatch.core.Fun
 import app.nuviowatch.core.LiveSessions
 import app.nuviowatch.core.LiveEvent
+import app.nuviowatch.core.Comment
 import app.nuviowatch.core.Outcome
+import app.nuviowatch.core.Rating
+import app.nuviowatch.core.Suggestion
 import app.nuviowatch.core.Prediction
 import app.nuviowatch.core.PredictionKind
 import app.nuviowatch.core.Reaction
@@ -54,7 +57,14 @@ enum class ServerStatus { DETECTING, READY, NOT_FOUND }
 /** A device where Nuvio is playing or paused right now. */
 data class LiveNow(val event: LiveEvent, val profile: Profile?, val info: TitleInfo?)
 
+/** The title whose sheet is open (Open in Nuvio, suggest, rate, comments). */
+data class OpenTitle(val contentId: String, val series: Boolean)
+
 data class SocialState(
+    val ratings: List<Rating> = emptyList(),
+    val suggestions: List<Suggestion> = emptyList(),
+    val comments: List<Comment> = emptyList(),
+    val openTitle: OpenTitle? = null,
     val reactions: List<Reaction> = emptyList(),
     val predictions: List<Prediction> = emptyList(),
     val votes: List<Vote> = emptyList(),
@@ -226,7 +236,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         liveDevices = prefs.liveDevices,
                         device = deviceSettings(),
                         statuses = statuses(),
-                        social = it.social.copy(reactions = prefs.reactions, predictions = prefs.predictions, votes = prefs.votes, myDeviceId = prefs.deviceId),
+                        social = it.social.copy(
+                            reactions = prefs.reactions, predictions = prefs.predictions, votes = prefs.votes, myDeviceId = prefs.deviceId,
+                            ratings = prefs.ratings, suggestions = prefs.suggestions, comments = prefs.comments,
+                        ),
                         recaps = it.recaps.copy(daily = prefs.dailyRecap, weekly = prefs.weeklyRecap, hour = prefs.recapHour),
                         live = prefs.liveEntries,
                         lastPollAt = prefs.lastPollAt,
@@ -372,6 +385,42 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun finishOnboarding() {
         prefs.onboarded = true
         local.update { it.copy(onboarded = true) }
+    }
+
+    fun openTitle(contentId: String, series: Boolean) =
+        local.update { it.copy(social = it.social.copy(openTitle = OpenTitle(contentId, series))) }
+
+    fun closeTitle() = local.update { it.copy(social = it.social.copy(openTitle = null)) }
+
+    private fun refreshSocial(message: String? = null) = local.update {
+        it.copy(social = it.social.copy(ratings = prefs.ratings, suggestions = prefs.suggestions, comments = prefs.comments, message = message ?: it.social.message))
+    }
+
+    fun suggest(toProfile: Int, contentId: String, series: Boolean) = viewModelScope.launch {
+        val title = state.value.titles[contentId]?.name ?: contentId
+        val ok = Inbox.suggest(getApplication(), toProfile, contentId, series, title)
+        refreshSocial(if (ok) "Suggested $title to ${state.value.profileName(toProfile)} 💡" else "Couldn't send, check your connection")
+    }
+
+    fun rate(contentId: String, stars: Int) = viewModelScope.launch {
+        val me = prefs.deviceProfile ?: return@launch refreshSocial("Choose who you are in Settings → This device first")
+        Inbox.rate(getApplication(), me, contentId, stars)
+        refreshSocial()
+    }
+
+    fun comment(contentId: String, text: String) = viewModelScope.launch {
+        if (text.isBlank()) return@launch
+        val me = prefs.deviceProfile
+        // Tag the comment with the episode you've reached, so it stays hidden from anyone behind.
+        val reached = me?.let { Fun.latestEpisode(state.value.viewings, it, contentId) }
+        Inbox.comment(getApplication(), contentId, reached?.first, reached?.second, text)
+        refreshSocial()
+    }
+
+    fun shareParty(input: String, title: String?) = viewModelScope.launch {
+        val code = Social.partyCode(input) ?: return@launch refreshSocial("That doesn't look like a Nuvio watch party link or code")
+        val ok = Inbox.party(getApplication(), code, title)
+        refreshSocial(if (ok) "Watch party sent to the family 🎉" else "Couldn't send, check your connection")
     }
 
     fun ping(profileIndex: Int, kind: String, title: String, deviceName: String? = null) = viewModelScope.launch {

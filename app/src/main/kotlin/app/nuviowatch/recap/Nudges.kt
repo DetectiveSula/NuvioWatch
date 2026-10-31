@@ -64,6 +64,47 @@ object Nudges {
         prefs.announcedBadges = updated
     }
 
+    /** Completed monthly challenges, for anyone. The first check records quietly, like badges. */
+    fun announceChallenges(context: Context, snapshot: Snapshot) {
+        val graph = context.graph
+        val prefs = graph.prefs
+        val all = viewings(snapshot, context)
+        if (all.isEmpty()) return
+        val month = java.time.YearMonth.now()
+        val seeded = prefs.isMarked("challenges-seeded|$month")
+        for (p in snapshot.profiles) {
+            val mine = all.filter { it.profileIndex == p.index }
+            for (c in Fun.challengesFor(month)) {
+                val progress = Fun.challengeProgress(c, mine, graph.titles.titles.value, graph.episodes.episodes.value, month)
+                val key = "challenge|$month|${p.index}|${c.name}"
+                if (progress.done && !prefs.isMarked(key)) {
+                    if (seeded) Notifier.showAnnouncement(context, "${c.emoji} ${p.name} completed ${c.title}", "${c.goalText}. +20 leaderboard points!", key.hashCode())
+                    prefs.mark(key)
+                }
+            }
+        }
+        prefs.mark("challenges-seeded|$month")
+    }
+
+    /** Morning: episodes out today of shows this phone's owner follows (or anyone's, on a shared device). */
+    private fun announceNewEpisodes(context: Context, snapshot: Snapshot) {
+        val graph = context.graph
+        val prefs = graph.prefs
+        val zone = ZoneId.systemDefault()
+        val start = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()
+        val me = prefs.deviceProfile
+        val alerts = Fun.newEpisodes(viewings(snapshot, context), graph.episodes.episodes.value, start, start + 86_400_000L, System.currentTimeMillis())
+            .filter { me == null || me in it.followers }
+        for (a in alerts) {
+            val key = "ep|${a.contentId}|${a.episode.season}|${a.episode.episode}"
+            if (prefs.isMarked(key)) continue
+            val show = graph.titles[a.contentId]?.name ?: continue
+            val label = listOfNotNull(app.nuviowatch.core.episodeLabel(a.episode.season, a.episode.episode), a.episode.title).joinToString(" · ")
+            Notifier.showNewEpisode(context, show, label)
+            prefs.mark(key)
+        }
+    }
+
     /** A notification the first time a new version is seen; tapping it opens the app's Update button. */
     private suspend fun announceUpdate(context: Context) {
         val info = app.nuviowatch.data.AppUpdater.check(context) ?: return
@@ -108,6 +149,8 @@ object Nudges {
         val snapshot = withTimeoutOrNull(7_000) { runCatching { graph.repository.refresh() }.getOrNull() }
             ?: graph.repository.snapshot.value
         announceBadges(context, snapshot)
+        announceChallenges(context, snapshot)
+        announceNewEpisodes(context, snapshot)
         announceUpdate(context)
         announceWinner(context, snapshot)
         remindStreak(context, snapshot)

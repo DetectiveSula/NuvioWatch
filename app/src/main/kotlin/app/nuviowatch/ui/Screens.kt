@@ -810,9 +810,9 @@ private fun HistoryRow(v: Viewing, state: UiState, showProfile: Boolean) {
     val info = state.titles[v.contentId]
     val profile = state.profile(v.profileIndex)
     val time = DateTimeFormatter.ofPattern("HH:mm").format(Instant.ofEpochMilli(v.atMs).atZone(ZoneId.systemDefault()))
-    val context = LocalContext.current
+    val openTitle = LocalOpenTitle.current
     Row(
-        Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open in Nuvio") { openInNuvio(context, v.contentId, v.series) }.padding(vertical = 10.dp),
+        Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open") { openTitle(v.contentId, v.series) }.padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {

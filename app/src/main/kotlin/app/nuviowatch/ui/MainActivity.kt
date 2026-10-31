@@ -81,9 +81,17 @@ private val tabs = listOf(
     NavItem("Settings", Icons.Filled.Settings),
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MainScreen(state: UiState, vm: MainViewModel) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalOpenTitle provides { id, series -> vm.openTitle(id, series) }) {
+        MainScreenContent(state, vm)
+        state.social.openTitle?.let { TitleSheet(state, vm, it) }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainScreenContent(state: UiState, vm: MainViewModel) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val context = LocalContext.current
     val isTv = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) }
