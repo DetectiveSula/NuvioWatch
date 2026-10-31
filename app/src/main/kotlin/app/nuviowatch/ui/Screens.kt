@@ -165,6 +165,28 @@ fun NowScreen(state: UiState, vm: MainViewModel, onOpenSettings: () -> Unit) {
                 Hero(state, hero, tint)
             }
         }
+        state.update?.let { u ->
+            item(key = "update") {
+                GlassCard(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Update available · ${u.versionName}", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                state.updateMessage ?: u.notes.lineSequence().firstOrNull { it.isNotBlank() } ?: "Tap Update to install it.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextMuted,
+                                maxLines = 2,
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Button(
+                            onClick = { vm.installUpdate() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Ink),
+                        ) { Text("Update") }
+                    }
+                }
+            }
+        }
         state.liveNow.drop(1).forEach { other ->
             item(key = "live-${other.event.deviceId}") { LiveRow(state, other, state.clock, onReact = { vm.react(other, it) }) }
         }
@@ -990,6 +1012,23 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton(onClick = { vm.sendTest() }) { Text("Send test alert") }
                 state.testMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = TextMuted, modifier = Modifier.padding(top = 6.dp)) }
+            }
+
+            GlassCard {
+                SectionTitle("App updates")
+                Text("Installed: ${app.nuviowatch.BuildConfig.VERSION_NAME}")
+                state.update?.let { Text("Available: ${it.versionName}", color = Color(0xFF7CE0C3), fontWeight = FontWeight.SemiBold) }
+                state.updateMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = TextMuted) }
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (state.update != null) {
+                        Button(
+                            onClick = { vm.installUpdate() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Ink),
+                        ) { Text("Update now") }
+                    }
+                    OutlinedButton(onClick = { vm.checkForUpdate(manual = true) }) { Text("Check for updates") }
+                }
             }
 
             GlassCard {

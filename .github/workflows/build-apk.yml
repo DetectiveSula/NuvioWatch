@@ -78,7 +78,7 @@ jobs:
           version="1.0.${GITHUB_RUN_NUMBER}"
           gh release create "v$version" NuvioWatch.apk \
             --title "Nuvio Watch $version" \
-            --notes "Install NuvioWatch.apk on Android. It installs over any earlier version." \
+            --notes "$(git log -1 --pretty=%B | grep -v -E '^(Co-Authored-By|Claude-Session):' | sed '/^$/N;/^\n$/D')" \
             --latest
 
   mac-helper:

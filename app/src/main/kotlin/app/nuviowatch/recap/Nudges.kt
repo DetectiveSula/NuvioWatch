@@ -64,6 +64,15 @@ object Nudges {
         prefs.announcedBadges = updated
     }
 
+    /** A notification the first time a new version is seen; tapping it opens the app's Update button. */
+    private suspend fun announceUpdate(context: Context) {
+        val info = app.nuviowatch.data.AppUpdater.check(context) ?: return
+        val prefs = context.graph.prefs
+        if (prefs.lastSent("update") == info.versionName) return
+        Notifier.showAnnouncement(context, "Nuvio Watch ${info.versionName} is ready", "Open the app and tap Update.", 53)
+        prefs.setLastSent("update", info.versionName)
+    }
+
     /** Monday morning: last week's champion. */
     private fun announceWinner(context: Context, snapshot: Snapshot) {
         val prefs = context.graph.prefs
@@ -99,6 +108,7 @@ object Nudges {
         val snapshot = withTimeoutOrNull(7_000) { runCatching { graph.repository.refresh() }.getOrNull() }
             ?: graph.repository.snapshot.value
         announceBadges(context, snapshot)
+        announceUpdate(context)
         announceWinner(context, snapshot)
         remindStreak(context, snapshot)
     }

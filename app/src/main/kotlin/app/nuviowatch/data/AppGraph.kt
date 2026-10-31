@@ -25,6 +25,7 @@ class AppGraph(private val context: Context) {
     private val cinemeta = Cinemeta(http)
     val titles = TitleCache(context, cinemeta)
     val episodes = EpisodeCache(context, cinemeta)
+    val updates = app.nuviowatch.core.Updates(http)
     val repository = Repository(context, ::client, titles)
     private val serverSetup = ServerSetup(http)
 

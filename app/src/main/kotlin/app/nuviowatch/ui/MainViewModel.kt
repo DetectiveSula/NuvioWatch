@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.nuviowatch.core.EpisodeInfo
+import app.nuviowatch.core.UpdateInfo
+import app.nuviowatch.data.AppUpdater
 import app.nuviowatch.core.LiveEvent
 import app.nuviowatch.core.Outcome
 import app.nuviowatch.core.Prediction
@@ -87,6 +89,9 @@ data class UiState(
     /** The account id; it's also the Mac helper's setup code. */
     val accountId: String = "",
     val onboarded: Boolean = true,
+    val update: UpdateInfo? = null,
+    /** Progress or problems while updating. */
+    val updateMessage: String? = null,
     val server: ServerStatus = ServerStatus.DETECTING,
     val serverUrl: String = "",
     val nuvioInstalled: Boolean = false,
@@ -125,6 +130,8 @@ data class UiState(
 }
 
 private data class Local(
+    val update: UpdateInfo? = null,
+    val updateMessage: String? = null,
     val onboarded: Boolean = true,
     val social: SocialState = SocialState(),
     val episodes: Map<String, List<EpisodeInfo>> = emptyMap(),
@@ -162,6 +169,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             email = prefs.session?.email.orEmpty(),
             accountId = prefs.session?.userId.orEmpty(),
             onboarded = local.onboarded,
+            update = local.update,
+            updateMessage = local.updateMessage,
             server = local.server,
             serverUrl = prefs.serverConfig?.baseUrl.orEmpty(),
             nuvioInstalled = graph.isNuvioInstalled,
@@ -191,6 +200,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         local.update { it.copy(onboarded = prefs.onboarded) }
+        checkForUpdate()
         // Announce predictions as they settle.
         viewModelScope.launch {
             while (true) {
@@ -304,6 +314,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val ok = Inbox.react(getApplication(), live.event, live.profile?.index, emoji)
         val who = live.profile?.name ?: live.event.deviceName
         local.update { it.copy(social = it.social.copy(reactions = prefs.reactions, message = if (ok) "Sent $emoji to $who" else "Couldn't send, check your connection")) }
+    }
+
+    fun checkForUpdate(manual: Boolean = false) = viewModelScope.launch {
+        if (manual) local.update { it.copy(updateMessage = "Checking…") }
+        val info = AppUpdater.check(getApplication())
+        local.update {
+            it.copy(update = info, updateMessage = if (manual && info == null) "You're on the latest version" else null)
+        }
+    }
+
+    fun installUpdate() = viewModelScope.launch {
+        val app = getApplication<Application>()
+        val info = state.value.update ?: return@launch
+        if (!AppUpdater.canInstall(app)) {
+            local.update { it.copy(updateMessage = "Allow Nuvio Watch to install updates, then tap Update again") }
+            AppUpdater.openInstallPermission(app)
+            return@launch
+        }
+        local.update { it.copy(updateMessage = "Downloading ${info.versionName}…") }
+        runCatching { AppUpdater.downloadAndInstall(app, info) }
+            .onSuccess { local.update { it.copy(updateMessage = null) } }
+            .onFailure { e -> local.update { it.copy(updateMessage = "Update failed: ${e.message}") } }
     }
 
     fun finishOnboarding() {
