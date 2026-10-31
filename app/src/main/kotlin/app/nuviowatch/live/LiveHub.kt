@@ -39,6 +39,9 @@ object LiveHub {
             ?.first
     }
 
+    /** The catalogue id for a media-session title, matched by name. */
+    fun titleIdFor(event: LiveEvent, titles: Map<String, TitleInfo>): String? = titleIds(event.title, titles).firstOrNull()
+
     /** Title details for a media-session title, matched by name. */
     fun titleFor(event: LiveEvent, titles: Map<String, TitleInfo>): TitleInfo? =
         titleIds(event.title, titles).firstNotNullOfOrNull { titles[it] }

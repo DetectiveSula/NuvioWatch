@@ -1,12 +1,15 @@
 package app.nuviowatch.live
 
 import android.content.Context
+import app.nuviowatch.core.Fun
 import app.nuviowatch.core.LiveChange
+import app.nuviowatch.core.Profile
 import app.nuviowatch.core.LiveEvent
 import app.nuviowatch.core.LiveTracker
 import app.nuviowatch.core.PlayState
 import app.nuviowatch.graph
 import app.nuviowatch.monitor.Notifier
+import app.nuviowatch.recap.Nudges
 import app.nuviowatch.widget.NowWidget
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -71,6 +74,7 @@ object LiveReceiver {
         }
         val who = profile?.name ?: "Someone on ${event.deviceName}"
         val title = LiveHub.titleFor(event, titles)
+        val ahead = if (change == LiveChange.STARTED) episodesAheadOfMe(context, event, profile?.index) else 0
         Notifier.showLive(
             context = context,
             event = event,
@@ -79,8 +83,73 @@ object LiveReceiver {
             poster = if (change == LiveChange.STARTED) Notifier.loadBitmap(context, title?.poster) else null,
             silent = change == LiveChange.STOPPED || event.state != PlayState.PLAYING,
             profileName = profile?.name,
+            subtitleOverride = if (ahead > 0) "⚠️ $ahead episode${if (ahead == 1) "" else "s"} ahead of you, episode hidden" else null,
         )
+        if (change == LiveChange.STARTED && profile != null) sameShow(context, event, profile)
         prefs.setStatus("alert", "Shown: $who ${if (change == LiveChange.STARTED) "started" else "stopped"} watching")
+    }
+
+    /** How far the watcher is ahead of this phone's owner in the same series (0 if not). */
+    fun episodesAheadOfMe(context: Context, event: LiveEvent, watcher: Int?): Int {
+        val graph = context.graph
+        val me = graph.prefs.deviceProfile ?: return 0
+        if (watcher == null || watcher == me) return 0
+        val theirs = Fun.episodeOf(event.subtitle) ?: return 0
+        val contentId = LiveHub.titleIdFor(event, graph.titles.titles.value) ?: return 0
+        val mine = Fun.latestEpisode(Nudges.viewings(graph.repository.snapshot.value, context), me, contentId)
+        return Fun.episodesAhead(theirs, mine, graph.episodes.episodes.value[contentId]).coerceAtLeast(0)
+    }
+
+    /** "Mani and Ishti are both watching …" — right now on two devices, or recently in Nuvio. Once a day per pair. */
+    private fun sameShow(context: Context, event: LiveEvent, watcher: Profile) {
+        val graph = context.graph
+        val prefs = graph.prefs
+        val snapshot = graph.repository.snapshot.value
+        val titles = graph.titles.titles.value
+        val contentId = LiveHub.titleIdFor(event, titles)
+        val name = LiveHub.titleFor(event, titles)?.name ?: event.title
+        val now = System.currentTimeMillis()
+
+        val liveOther = prefs.liveDevices.values.firstOrNull { other ->
+            other.deviceId != event.deviceId && other.state != PlayState.STOPPED && now - other.at < 5 * 60_000L &&
+                LiveHub.titleIdFor(other, titles) == contentId && contentId != null
+        }?.let { other -> LiveHub.profileFor(other, snapshot, titles)?.takeIf { it.index != watcher.index }?.let { it to other } }
+
+        val recentOther = if (liveOther == null && contentId != null) {
+            snapshot.profiles.filter { it.index != watcher.index }.mapNotNull { p ->
+                val last = snapshot.progress[p.index].orEmpty().filter { it.contentId == contentId }.maxByOrNull { it.lastWatchedMs }
+                last?.takeIf { now - it.lastWatchedMs < 7 * 86_400_000L }?.let { p to it }
+            }.maxByOrNull { it.second.lastWatchedMs }
+        } else {
+            null
+        }
+        val other = liveOther?.first ?: recentOther?.first ?: return
+
+        val key = "same|${minOf(watcher.index, other.index)}|${maxOf(watcher.index, other.index)}|$name"
+        val today = java.time.LocalDate.now().toString()
+        if (prefs.lastSent(key) == today) return
+        prefs.setLastSent(key, today)
+
+        val me = prefs.deviceProfile
+        val (ask, askName) = when (me) {
+            watcher.index -> other.index to other.name
+            other.index -> watcher.index to watcher.name
+            else -> null to null
+        }
+        if (liveOther != null) {
+            Notifier.showSameShow(
+                context,
+                "${watcher.name} and ${other.name} are both watching $name",
+                "Right now, on ${event.deviceName} and ${liveOther.second.deviceName}.",
+                ask,
+                askName,
+                name,
+            )
+        } else {
+            val entry = recentOther!!.second
+            val where = app.nuviowatch.core.episodeLabel(entry.season, entry.episode)?.let { " (on $it)" }.orEmpty()
+            Notifier.showSameShow(context, "${other.name} is watching $name too", "${other.name} watched it recently$where. Watch the next one together?", ask, askName, name)
+        }
     }
 
     fun reset() {

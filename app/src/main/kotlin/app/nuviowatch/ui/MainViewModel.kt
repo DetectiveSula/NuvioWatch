@@ -26,6 +26,7 @@ import app.nuviowatch.live.LiveHub
 import app.nuviowatch.monitor.Notifier
 import app.nuviowatch.live.LiveReceiver
 import app.nuviowatch.live.NowPlayingListener
+import app.nuviowatch.recap.Nudges
 import app.nuviowatch.recap.Recaps
 import app.nuviowatch.widget.NowWidget
 import app.nuviowatch.monitor.Monitor
@@ -246,6 +247,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .onSuccess { snapshot ->
                 local.update { it.copy(loading = false) }
                 NowWidget.update(getApplication())
+                Nudges.announceBadges(getApplication(), snapshot)
                 // Episode lists for shows watched in the last two months, for "Up next".
                 val since = System.currentTimeMillis() - 60 * 86_400_000L
                 val series = snapshot.progress.values.flatten().filter { it.season != null && it.lastWatchedMs > since }.map { it.contentId } +
@@ -298,6 +300,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val ok = Inbox.react(getApplication(), live.event, live.profile?.index, emoji)
         val who = live.profile?.name ?: live.event.deviceName
         local.update { it.copy(social = it.social.copy(reactions = prefs.reactions, message = if (ok) "Sent $emoji to $who" else "Couldn't send, check your connection")) }
+    }
+
+    fun ping(profileIndex: Int, kind: String, title: String, deviceName: String? = null) = viewModelScope.launch {
+        val ok = Inbox.ping(getApplication(), profileIndex, kind, title, deviceName)
+        val who = state.value.profileName(profileIndex)
+        val msg = when {
+            !ok -> "Couldn't send, check your connection"
+            kind == "join" -> "Invited $who to watch 🍿"
+            else -> "Asked $who to watch together 🍿"
+        }
+        local.update { it.copy(social = it.social.copy(message = msg)) }
     }
 
     fun predict(profileIndex: Int, kind: PredictionKind, contentId: String?, season: Int?, hours: Int?, deadlineMs: Long) = viewModelScope.launch {

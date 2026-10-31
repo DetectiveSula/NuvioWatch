@@ -290,6 +290,59 @@ object Fun {
             )
     }
 
+    // ------------------------------------------------------------ Announcements
+
+    /** Badges earned now that weren't in [alreadyAnnounced] (keys like "3|NIGHT_OWL"). */
+    fun newBadges(profileIndex: Int, current: List<BadgeProgress>, alreadyAnnounced: Set<String>): List<Badge> =
+        current.filter { it.earned && badgeKey(profileIndex, it.badge) !in alreadyAnnounced }.map { it.badge }
+
+    fun badgeKey(profileIndex: Int, badge: Badge) = "$profileIndex|${badge.name}"
+
+    /**
+     * The streak someone would lose at midnight: they watched up to yesterday
+     * (a streak of 2+ days) but nothing yet today. Null if nothing's at risk.
+     */
+    fun streakAtRisk(viewings: List<Viewing>, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): Int? {
+        val today = date(nowMs, zone)
+        if (viewings.any { it.atMs > 0 && it.watchedMs > 0 && date(it.atMs, zone) == today }) return null
+        val streak = streaks(viewings, nowMs, zone).first
+        return streak.takeIf { it >= 2 }
+    }
+
+    // ------------------------------------------------------------ Shared shows and spoilers
+
+    private val episodePattern = Regex("""S(\d+)\D{0,3}E(\d+)""", RegexOption.IGNORE_CASE)
+
+    /** Season and episode from a player subtitle: "S6, E1: …", "S6:E1 – …", "S6 · E1". */
+    fun episodeOf(subtitle: String?): Pair<Int, Int>? =
+        subtitle?.let { episodePattern.find(it) }?.let { it.groupValues[1].toInt() to it.groupValues[2].toInt() }
+
+    /** The furthest episode [profileIndex] has reached in a series (watched or started). */
+    fun latestEpisode(viewings: List<Viewing>, profileIndex: Int, contentId: String): Pair<Int, Int>? =
+        viewings.filter { it.profileIndex == profileIndex && it.contentId == contentId && it.season != null && it.episode != null }
+            .maxWithOrNull(compareBy({ it.season!! }, { it.episode!! }))
+            ?.let { it.season!! to it.episode!! }
+
+    /**
+     * How many episodes [theirs] is ahead of [mine] (0 or less: not ahead). Uses the
+     * real episode list when known, otherwise counts within a season and treats each
+     * later season as at least one episode ahead.
+     */
+    fun episodesAhead(theirs: Pair<Int, Int>, mine: Pair<Int, Int>?, episodes: List<EpisodeInfo>?): Int {
+        val my = mine ?: (1 to 0)
+        if (!episodes.isNullOrEmpty()) {
+            fun index(p: Pair<Int, Int>) = episodes.indexOfFirst { it.season == p.first && it.episode == p.second }
+            val t = index(theirs)
+            val m = if (mine == null) -1 else index(my)
+            if (t >= 0 && (m >= 0 || mine == null)) return t - m
+        }
+        return when {
+            theirs.first == my.first -> theirs.second - my.second
+            theirs.first > my.first -> maxOf(1, theirs.second)
+            else -> -1
+        }
+    }
+
     // ------------------------------------------------------------ Wrapped
 
     fun wrapped(

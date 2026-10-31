@@ -16,7 +16,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import app.nuviowatch.R
 import app.nuviowatch.core.Digest
+import app.nuviowatch.core.Badge
 import app.nuviowatch.core.LiveEvent
+import app.nuviowatch.core.Ping
 import app.nuviowatch.core.Prediction
 import app.nuviowatch.core.Reaction
 import app.nuviowatch.core.Profile
@@ -111,10 +113,20 @@ object Notifier {
         return id
     }
 
-    fun showLive(context: Context, event: LiveEvent, heading: String, profileIndex: Int?, poster: Bitmap?, silent: Boolean, profileName: String? = null) {
+    fun showLive(
+        context: Context,
+        event: LiveEvent,
+        heading: String,
+        profileIndex: Int?,
+        poster: Bitmap?,
+        silent: Boolean,
+        profileName: String? = null,
+        subtitleOverride: String? = null,
+    ) {
         if (!canNotify(context)) return
         val id = "live|${event.deviceId}".hashCode()
-        val text = listOfNotNull(event.title, event.subtitle?.takeIf { it.isNotBlank() }, "on ${event.deviceName}").joinToString(" · ")
+        val subtitle = subtitleOverride ?: event.subtitle?.takeIf { it.isNotBlank() }
+        val text = listOfNotNull(event.title, subtitle, "on ${event.deviceName}").joinToString(" · ")
         val channel = if (profileIndex != null && profileName != null) personChannel(context, profileIndex, profileName) else ALERTS
         val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notification)
@@ -160,6 +172,61 @@ object Notifier {
             .build()
         @Suppress("MissingPermission")
         NotificationManagerCompat.from(context).notify(id, notification)
+    }
+
+    fun showBadge(context: Context, name: String, badge: Badge) =
+        showAnnouncement(context, "${badge.emoji} $name unlocked ${badge.title}", badge.rule, "badge|$name|${badge.name}".hashCode())
+
+    fun showAnnouncement(context: Context, title: String, text: String, id: Int) {
+        if (!canNotify(context)) return
+        val notification = NotificationCompat.Builder(context, RECAPS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setColor(0xFFFFD166.toInt())
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context))
+            .build()
+        @Suppress("MissingPermission")
+        NotificationManagerCompat.from(context).notify(id, notification)
+    }
+
+    /** "Mani: Come watch with me!" / "Mani wants to watch … together". */
+    fun showPing(context: Context, p: Ping) {
+        if (!canNotify(context)) return
+        val title = if (p.kind == "join") "🍿 ${p.fromName}: Come watch with me!" else "🍿 ${p.fromName} wants to watch together"
+        val text = listOfNotNull(p.title, p.deviceName?.let { "on $it" }).joinToString(" · ")
+        val notification = NotificationCompat.Builder(context, ALERTS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context))
+            .build()
+        @Suppress("MissingPermission")
+        NotificationManagerCompat.from(context).notify(p.id.hashCode(), notification)
+    }
+
+    /** "Mani and Ishti are both watching …", with a button that asks the other person to watch together. */
+    fun showSameShow(context: Context, heading: String, text: String, askProfile: Int?, askName: String?, title: String) {
+        if (!canNotify(context)) return
+        val builder = NotificationCompat.Builder(context, ALERTS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(heading)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context))
+        val id = "same|$heading".hashCode()
+        if (askProfile != null && askName != null) {
+            builder.addAction(0, "Watch together?", TogetherReceiver.intent(context, askProfile, title, id))
+        }
+        @Suppress("MissingPermission")
+        NotificationManagerCompat.from(context).notify(id, builder.build())
     }
 
     fun showReaction(context: Context, r: Reaction) {

@@ -2,6 +2,7 @@ package app.nuviowatch.live
 
 import android.content.Context
 import app.nuviowatch.core.LiveEvent
+import app.nuviowatch.core.Ping
 import app.nuviowatch.core.Prediction
 import app.nuviowatch.core.Reaction
 import app.nuviowatch.core.Social
@@ -37,6 +38,10 @@ object Inbox {
             is Reaction -> onReaction(context, message)
             is Prediction -> onPrediction(context, message)
             is Vote -> if (prefs.votes.none { it.voterId == message.voterId && it.at == message.at }) prefs.votes = prefs.votes + message
+            is Ping -> {
+                val forMe = message.fromDeviceId != prefs.deviceId && message.toProfile == prefs.deviceProfile
+                if (forMe && System.currentTimeMillis() - message.at < 30 * 60_000L) Notifier.showPing(context, message)
+            }
         }
         prefs.liveSince = id
     }
@@ -77,6 +82,23 @@ object Inbox {
         )
         prefs.reactions = prefs.reactions + reaction
         return send(context, Social.encode(reaction))
+    }
+
+    /** "join": come watch with me; "together": let's watch this together. */
+    suspend fun ping(context: Context, toProfile: Int, kind: String, title: String, deviceName: String? = null): Boolean {
+        val graph = context.graph
+        val prefs = graph.prefs
+        val ping = Ping(
+            id = UUID.randomUUID().toString(),
+            kind = kind,
+            fromDeviceId = prefs.deviceId,
+            fromName = prefs.myName(graph.repository.snapshot.value.profiles),
+            toProfile = toProfile,
+            title = title,
+            deviceName = deviceName,
+            at = System.currentTimeMillis(),
+        )
+        return send(context, Social.encode(ping))
     }
 
     suspend fun predict(context: Context, prediction: Prediction): Boolean {

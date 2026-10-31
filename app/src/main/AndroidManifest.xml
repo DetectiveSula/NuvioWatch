@@ -87,6 +87,14 @@
             android:exported="false" />
 
         <receiver
+            android:name=".recap.NudgeReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".monitor.TogetherReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".monitor.BootReceiver"
             android:exported="true">
             <intent-filter>

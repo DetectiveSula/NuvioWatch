@@ -59,6 +59,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
@@ -73,6 +74,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nuviowatch.core.AlertPolicy
+import app.nuviowatch.core.Fun
 import app.nuviowatch.core.LiveState
 import app.nuviowatch.core.LiveTracker
 import app.nuviowatch.core.PlayState
@@ -155,10 +157,16 @@ fun NowScreen(state: UiState, vm: MainViewModel, onOpenSettings: () -> Unit) {
     Box(Modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxSize().glow(tint)) {
         item(key = "hero") {
-            if (live != null) LiveHero(state, live, tint, onReact = { vm.react(live, it) }) else Hero(state, hero, tint)
+            if (live != null) {
+                LiveHero(state, live, tint, onReact = { vm.react(live, it) }, onPing = { p, kind ->
+                    vm.ping(p, kind, live.info?.name ?: live.event.title, live.event.deviceName)
+                })
+            } else {
+                Hero(state, hero, tint)
+            }
         }
         state.liveNow.drop(1).forEach { other ->
-            item(key = "live-${other.event.deviceId}") { LiveRow(other, state.clock, onReact = { vm.react(other, it) }) }
+            item(key = "live-${other.event.deviceId}") { LiveRow(state, other, state.clock, onReact = { vm.react(other, it) }) }
         }
         state.social.message?.let { msg ->
             item(key = "social-msg") { Text(msg, fontSize = 12.sp, color = TextMuted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
@@ -303,6 +311,41 @@ private fun DeviceStrip(state: UiState) {
     }
 }
 
+/** How many episodes the live watcher is ahead of this phone's owner in the same series. */
+private fun spoilerAhead(state: UiState, live: LiveNow): Int {
+    val me = state.device.profileIndex ?: return 0
+    if (live.profile == null || live.profile.index == me) return 0
+    val theirs = Fun.episodeOf(live.event.subtitle) ?: return 0
+    val contentId = LiveHub.titleIdFor(live.event, state.titles) ?: return 0
+    return Fun.episodesAhead(theirs, Fun.latestEpisode(state.viewings, me, contentId), state.episodes[contentId]).coerceAtLeast(0)
+}
+
+/** Episode details, blurred (or hidden on older Android) when they'd spoil it for you. */
+@Composable
+private fun SpoilerSafeText(text: String, ahead: Int, color: Color, small: Boolean = false) {
+    val size = if (small) 12.sp else 16.sp
+    when {
+        ahead <= 0 -> Text(text, color = color, fontSize = size, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Build.VERSION.SDK_INT >= 31 -> Text(text, color = color, fontSize = size, maxLines = 1, modifier = Modifier.blur(8.dp))
+        else -> Text("Episode hidden", color = color, fontSize = size)
+    }
+}
+
+@Composable
+private fun ActionChip(label: String, onClick: () -> Unit) {
+    Text(
+        label,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color(0x26FFFFFF))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        color = Color.White,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 13.sp,
+    )
+}
+
 /** Quick emoji reactions to whoever is watching. */
 @Composable
 private fun ReactionBar(onReact: (String) -> Unit) {
@@ -393,7 +436,7 @@ private fun Hero(state: UiState, hero: ProfileNow?, tint: Color) {
 
 /** The hero when a device is reporting Nuvio playback right now. */
 @Composable
-private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (String) -> Unit) {
+private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (String) -> Unit, onPing: (Int, String) -> Unit) {
     val event = live.event
     val playing = event.state == PlayState.PLAYING
     val position = LiveTracker.estimatedPosition(event, state.clock)
@@ -437,7 +480,9 @@ private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (Strin
             }
             val name = live.info?.name ?: event.title
             Text(name, style = display(heroTitleSize(name)), maxLines = 3, overflow = TextOverflow.Ellipsis)
-            event.subtitle?.takeIf { it.isNotBlank() }?.let { Text(it, color = Color(0xFFD6D1E6), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            val ahead = spoilerAhead(state, live)
+            event.subtitle?.takeIf { it.isNotBlank() }?.let { SpoilerSafeText(it, ahead, Color(0xFFD6D1E6)) }
+            if (ahead > 0) Pill("⚠️ ${who} is $ahead episode${if (ahead == 1) "" else "s"} ahead, careful!", Color(0xFFFFD166))
             if (event.durationMs > 0) {
                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(formatClock(position), style = MaterialTheme.typography.labelSmall, color = Color(0xFFD6D1E6))
@@ -450,6 +495,17 @@ private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (Strin
             if (event.deviceId != state.social.myDeviceId) {
                 Spacer(Modifier.height(4.dp))
                 ReactionBar(onReact)
+                live.profile?.takeIf { it.index != state.device.profileIndex }?.let { p ->
+                    ActionChip("🍿 Watch together?") { onPing(p.index, "together") }
+                }
+            } else {
+                // It's you watching: invite someone.
+                Text("Invite someone to watch", fontSize = 12.sp, color = TextMuted)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    state.snapshot.profiles.filter { it.index != live.profile?.index && it.index != state.device.profileIndex }.forEach { p ->
+                        ActionChip("🍿 ${p.name}") { onPing(p.index, "join") }
+                    }
+                }
             }
         }
     }
@@ -457,7 +513,7 @@ private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (Strin
 
 /** Extra devices playing at the same time. */
 @Composable
-private fun LiveRow(live: LiveNow, now: Long, onReact: (String) -> Unit) {
+private fun LiveRow(state: UiState, live: LiveNow, now: Long, onReact: (String) -> Unit) {
     val playing = live.event.state == PlayState.PLAYING
     GlassCard(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), padding = 12.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -470,12 +526,9 @@ private fun LiveRow(live: LiveNow, now: Long, onReact: (String) -> Unit) {
                     color = if (playing) Color(0xFFFFB3C1) else TextMuted,
                 )
                 Text(live.info?.name ?: live.event.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
-                    listOfNotNull(live.event.subtitle, live.event.deviceName).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextMuted,
-                    maxLines = 1,
-                )
+                val ahead = spoilerAhead(state, live)
+                SpoilerSafeText(listOfNotNull(live.event.subtitle, live.event.deviceName).joinToString(" · "), ahead, TextMuted, small = true)
+                if (ahead > 0) Text("⚠️ $ahead episode${if (ahead == 1) "" else "s"} ahead of you", fontSize = 11.sp, color = Color(0xFFFFD166))
             }
             if (playing) LiveDot(6.dp)
         }

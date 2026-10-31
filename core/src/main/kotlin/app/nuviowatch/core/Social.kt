@@ -22,6 +22,20 @@ data class Reaction(
     val at: Long,
 )
 
+/** A nudge to someone: "Come watch with me!" or "Watch together?". */
+@Serializable
+data class Ping(
+    val type: String = "ping",
+    val id: String,
+    val kind: String, // "join" or "together"
+    val fromDeviceId: String,
+    val fromName: String,
+    val toProfile: Int,
+    val title: String,
+    val deviceName: String? = null,
+    val at: Long,
+)
+
 enum class PredictionKind { FINISH_SEASON, FINISH_FILM, WATCH_HOURS }
 
 /** "Will Mani finish season 6 by Sunday?" — settled automatically from Nuvio history. */
@@ -64,6 +78,7 @@ object Social {
             "reaction" -> json.decodeFromString<Reaction>(text)
             "prediction" -> json.decodeFromString<Prediction>(text)
             "vote" -> json.decodeFromString<Vote>(text)
+            "ping" -> json.decodeFromString<Ping>(text)
             else -> json.decodeFromString<LiveEvent>(text)
         }
     }.getOrNull()
@@ -72,6 +87,7 @@ object Social {
         is Reaction -> json.encodeToString(message)
         is Prediction -> json.encodeToString(message)
         is Vote -> json.encodeToString(message)
+        is Ping -> json.encodeToString(message)
         is LiveEvent -> json.encodeToString(message)
         else -> error("Not a live message: $message")
     }

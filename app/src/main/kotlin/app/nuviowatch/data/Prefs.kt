@@ -170,6 +170,15 @@ class Prefs(context: Context) : SessionStore {
     fun myName(profiles: List<app.nuviowatch.core.Profile>): String =
         deviceProfile?.let { index -> profiles.firstOrNull { it.index == index }?.name } ?: deviceName
 
+        /** Badges already announced, as "profile|BADGE"; null until the first check seeds it quietly. */
+    var announcedBadges: Set<String>?
+        get() = if (prefs.contains("announced_badges")) prefs.getStringSet("announced_badges", emptySet()).orEmpty() else null
+        set(value) = prefs.edit { if (value == null) remove("announced_badges") else putStringSet("announced_badges", value) }
+
+    /** Last "once a day/week" announcement sent, by name (e.g. "winner" → "2026-W44"). */
+    fun lastSent(name: String): String? = prefs.getString("last_sent_$name", null)
+    fun setLastSent(name: String, value: String) = prefs.edit { putString("last_sent_$name", value) }
+
         /** Alerts about a profile are paused until this time (set by "Mute today"). */
     fun mutedUntil(profileId: Int): Long = prefs.getLong("muted_until_$profileId", 0)
     fun setMutedUntil(profileId: Int, at: Long) = prefs.edit { putLong("muted_until_$profileId", at) }

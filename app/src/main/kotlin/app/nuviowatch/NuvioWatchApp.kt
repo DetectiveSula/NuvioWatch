@@ -4,6 +4,7 @@ import android.app.Application
 import app.nuviowatch.data.AppGraph
 import app.nuviowatch.monitor.MonitorService
 import app.nuviowatch.monitor.Notifier
+import app.nuviowatch.recap.Nudges
 import app.nuviowatch.recap.Recaps
 
 class NuvioWatchApp : Application() {
@@ -15,6 +16,7 @@ class NuvioWatchApp : Application() {
         graph = AppGraph(this)
         Notifier.createChannels(this)
         runCatching { Recaps.schedule(this) }
+        runCatching { Nudges.schedule(this) }
         if (graph.prefs.settings.value.enabled && graph.prefs.signedIn.value) {
             runCatching { MonitorService.start(this) }
         }
