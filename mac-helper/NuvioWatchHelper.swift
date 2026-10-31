@@ -99,22 +99,40 @@ final class PlaybackState {
 
     private func now() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
 
-    /// Nuvio Desktop sends "Watching: <title>" / "Paused: <title>" while the player is open.
-    func activityChanged(_ activity: [String: Any]?) {
-        let details = activity?["details"] as? String ?? ""
-        let stateLine = activity?["state"] as? String
-        let start = (activity?["timestamps"] as? [String: Any])?["start"] as? NSNumber
-
-        var state = "STOPPED"
-        var title = ""
-        if details.hasPrefix("Watching: ") {
-            state = "PLAYING"
-            title = String(details.dropFirst("Watching: ".count))
-        } else if details.hasPrefix("Paused: ") {
-            state = "PAUSED"
-            title = String(details.dropFirst("Paused: ".count))
+    /// Works out play / pause / stop from a Rich Presence status. Nuvio Desktop has used two formats:
+    ///   older: details "Watching: <title>" / "Paused: <title>", state "<episode>"
+    ///   newer: details "<title>", state "<episode>" or "<episode> • Paused" (or just "Paused")
+    /// Outside the player it sends "Browsing …" or "Viewing …".
+    static func parse(details: String, stateLine: String?) -> (state: String, title: String, subtitle: String?) {
+        let pausedSuffix = try! NSRegularExpression(pattern: "\\s*[•·|-]\\s*Paused\\s*$", options: [.caseInsensitive])
+        func clean(_ line: String?) -> (text: String?, paused: Bool) {
+            guard var text = line?.trimmingCharacters(in: .whitespaces), !text.isEmpty else { return (nil, false) }
+            if text.caseInsensitiveCompare("Paused") == .orderedSame { return (nil, true) }
+            if text.caseInsensitiveCompare("Watching") == .orderedSame { return (nil, false) }
+            let range = NSRange(text.startIndex..., in: text)
+            if pausedSuffix.firstMatch(in: text, range: range) != nil {
+                text = pausedSuffix.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+                return (text.isEmpty ? nil : text, true)
+            }
+            return (text, false)
         }
-        let subtitle = (stateLine == "Watching" || stateLine == "Paused") ? nil : stateLine
+        if details.isEmpty || details.hasPrefix("Browsing") || details.hasPrefix("Viewing ") {
+            return ("STOPPED", "", nil)
+        }
+        if details.hasPrefix("Watching: ") {
+            return ("PLAYING", String(details.dropFirst("Watching: ".count)), clean(stateLine).text)
+        }
+        if details.hasPrefix("Paused: ") {
+            return ("PAUSED", String(details.dropFirst("Paused: ".count)), clean(stateLine).text)
+        }
+        let line = clean(stateLine)
+        return (line.paused ? "PAUSED" : "PLAYING", details, line.text)
+    }
+
+    func activityChanged(_ activity: [String: Any]?) {
+        let details = (activity?["details"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+        let start = (activity?["timestamps"] as? [String: Any])?["start"] as? NSNumber
+        let (state, title, subtitle) = PlaybackState.parse(details: details, stateLine: activity?["state"] as? String)
 
         lock.lock()
         defer { lock.unlock() }
