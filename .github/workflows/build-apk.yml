@@ -80,3 +80,32 @@ jobs:
             --title "Nuvio Watch $version" \
             --notes "Install NuvioWatch.apk on Android. It installs over any earlier version." \
             --latest
+
+  mac-helper:
+    needs: build
+    runs-on: macos-latest
+    env:
+      SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the Mac helper (Intel + Apple silicon)
+        run: |
+          mkdir -p build/NuvioWatch-Mac
+          swiftc -O -target arm64-apple-macos12 mac-helper/NuvioWatchHelper.swift -o build/helper-arm64
+          swiftc -O -target x86_64-apple-macos12 mac-helper/NuvioWatchHelper.swift -o build/helper-x86_64
+          lipo -create build/helper-arm64 build/helper-x86_64 -output build/NuvioWatch-Mac/nuvio-watch-helper
+          codesign --force --sign - build/NuvioWatch-Mac/nuvio-watch-helper
+          cp mac-helper/install.sh mac-helper/uninstall.sh build/NuvioWatch-Mac/
+          cd build && zip -r NuvioWatch-Mac.zip NuvioWatch-Mac
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NuvioWatch-Mac
+          path: build/NuvioWatch-Mac.zip
+
+      - name: Attach to the release
+        if: env.SIGNING_KEYSTORE_BASE64 != '' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "v1.0.${GITHUB_RUN_NUMBER}" build/NuvioWatch-Mac.zip --clobber

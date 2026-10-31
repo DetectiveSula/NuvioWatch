@@ -83,6 +83,8 @@ data class ProfileNow(
 data class UiState(
     val signedIn: Boolean = false,
     val email: String = "",
+    /** The account id; it's also the Mac helper's setup code. */
+    val accountId: String = "",
     val server: ServerStatus = ServerStatus.DETECTING,
     val serverUrl: String = "",
     val nuvioInstalled: Boolean = false,
@@ -155,6 +157,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         UiState(
             signedIn = signedIn,
             email = prefs.session?.email.orEmpty(),
+            accountId = prefs.session?.userId.orEmpty(),
             server = local.server,
             serverUrl = prefs.serverConfig?.baseUrl.orEmpty(),
             nuvioInstalled = graph.isNuvioInstalled,

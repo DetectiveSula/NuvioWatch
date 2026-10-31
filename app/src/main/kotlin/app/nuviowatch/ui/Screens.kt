@@ -898,6 +898,8 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
 
             DeviceCard(state, vm)
 
+            MacCard(state)
+
             GlassCard {
                 SectionTitle("Status")
                 state.statuses.forEach { (label, value) ->
@@ -920,6 +922,46 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
             }
         }
         Spacer(Modifier.navigationBarsPadding().height(BottomSpace))
+    }
+}
+
+/** Setting up live reports from Nuvio Desktop on a Mac. */
+@Composable
+private fun MacCard(state: UiState) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+    GlassCard {
+        SectionTitle("Mac (Nuvio Desktop)")
+        Text(
+            "Get instant alerts from Nuvio Desktop on a Mac too. It works through Nuvio Desktop's Discord Rich Presence setting; Discord itself isn't needed.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextMuted,
+        )
+        Spacer(Modifier.height(10.dp))
+        listOf(
+            "1. On the Mac, download NuvioWatch-Mac.zip from the latest release on GitHub and open it.",
+            "2. In Terminal, run the command below.",
+            "3. In Nuvio Desktop → Settings, turn on Discord Rich Presence, then restart it.",
+        ).forEach { Text(it, fontSize = 13.sp, modifier = Modifier.padding(vertical = 2.dp)) }
+        Spacer(Modifier.height(10.dp))
+        val command = "bash ~/Downloads/NuvioWatch-Mac/install.sh ${state.accountId} \"Mac\""
+        Text(
+            command,
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0x1AFFFFFF)).padding(12.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color(0xFFC3CAFF),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = {
+            clipboard.setText(androidx.compose.ui.text.AnnotatedString(command))
+            copied = true
+        }) { Text(if (copied) "Copied ✓" else "Copy command") }
+        Text(
+            "The code in the command is your setup code. Keep it within the family: anyone with it can see what's playing.",
+            fontSize = 11.sp,
+            color = TextMuted,
+            modifier = Modifier.padding(top = 6.dp),
+        )
     }
 }
 
