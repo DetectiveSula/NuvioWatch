@@ -15,6 +15,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -50,6 +51,10 @@ data class SeasonStyle(
         }
         Season.EASTER -> "Happy Easter"
         Season.EID -> "Eid Mubarak"
+        Season.NEW_YEAR -> "Happy New Year ${today.year}"
+        Season.SPRING -> "Spring is here"
+        Season.SUMMER -> "Summer nights"
+        Season.AUTUMN -> "Cosy season"
         Season.EVERYDAY -> null
     }
 
@@ -61,6 +66,10 @@ data class SeasonStyle(
             Season.CHRISTMAS -> SeasonStyle(season, Color(0xFFD62F3F), Color.White, null, listOf("🎄", "😂", "😱", "😭", "⛄", "👏", "❤️"))
             Season.EASTER -> SeasonStyle(season, Color(0xFFF2C94C), Color(0xFF2A1E00), Color(0x3DF7A8C8), listOf("🐣", "😂", "😱", "😭", "🐰", "👏", "🥚"))
             Season.EID -> SeasonStyle(season, Color(0xFFD4AF37), Color(0xFF0B1F17), Color(0x401F8A5B), listOf("🌙", "😂", "😱", "😭", "✨", "👏", "❤️"))
+            Season.NEW_YEAR -> SeasonStyle(season, Color(0xFFFFD166), Color(0xFF0A0910), Color(0x402B4FD1), listOf("🎆", "😂", "😱", "😭", "🥂", "👏", "❤️"))
+            Season.SPRING -> SeasonStyle(season, Color(0xFF7CE0C3), Color(0xFF0B241A), Color(0x38F7A8C8), listOf("🌸", "😂", "😱", "😭", "🌷", "👏", "❤️"))
+            Season.SUMMER -> SeasonStyle(season, Color(0xFFFFB347), Color(0xFF2A1400), Color(0x40FF6B57), listOf("☀️", "😂", "😱", "😭", "🍦", "👏", "❤️"))
+            Season.AUTUMN -> SeasonStyle(season, Color(0xFFE8890C), Color(0xFF1F0E00), Color(0x40E8890C), listOf("🍂", "😂", "😱", "😭", "☕", "👏", "❤️"))
             Season.EVERYDAY -> EVERYDAY
         }
     }
@@ -99,8 +108,54 @@ fun SeasonBadge(size: Dp = 22.dp) {
                 drawLine(Color(0xFFF2C94C), Offset(w * 0.22f, h * 0.65f), Offset(w * 0.78f, h * 0.65f), strokeWidth = h * 0.08f)
             }
             Season.EID -> crescent(Offset(w * 0.45f, h * 0.5f), w * 0.42f, Color(0xFFD4AF37))
+            Season.NEW_YEAR -> burst(Offset(w / 2, h / 2), w * 0.48f, Color(0xFFFFD166), 1f)
+            Season.SPRING -> flower(Offset(w / 2, h / 2), w * 0.5f, Color(0xFFF7A8C8))
+            Season.SUMMER -> {
+                drawCircle(Color(0xFFFFB347), w * 0.24f, Offset(w / 2, h / 2))
+                for (i in 0 until 8) {
+                    val a = i * Math.PI / 4
+                    drawLine(
+                        Color(0xFFFFB347),
+                        Offset(w / 2 + (w * 0.34f * kotlin.math.cos(a)).toFloat(), h / 2 + (h * 0.34f * kotlin.math.sin(a)).toFloat()),
+                        Offset(w / 2 + (w * 0.48f * kotlin.math.cos(a)).toFloat(), h / 2 + (h * 0.48f * kotlin.math.sin(a)).toFloat()),
+                        strokeWidth = w * 0.08f,
+                    )
+                }
+            }
+            Season.AUTUMN -> leaf(Offset(w / 2, h / 2), w * 0.46f, Color(0xFFE8890C), 0f)
             Season.EVERYDAY -> Unit
         }
+    }
+}
+
+/** A firework: lines bursting out from the middle. */
+private fun DrawScope.burst(center: Offset, r: Float, color: Color, alpha: Float) {
+    for (i in 0 until 12) {
+        val a = i * Math.PI / 6
+        val start = Offset(center.x + (r * 0.3f * kotlin.math.cos(a)).toFloat(), center.y + (r * 0.3f * kotlin.math.sin(a)).toFloat())
+        val end = Offset(center.x + (r * kotlin.math.cos(a)).toFloat(), center.y + (r * kotlin.math.sin(a)).toFloat())
+        drawLine(color.copy(alpha = alpha), start, end, strokeWidth = r * 0.12f)
+    }
+}
+
+private fun DrawScope.flower(center: Offset, r: Float, color: Color) {
+    for (i in 0 until 5) {
+        val a = i * 2 * Math.PI / 5
+        drawCircle(color, r * 0.36f, Offset(center.x + (r * 0.5f * kotlin.math.cos(a)).toFloat(), center.y + (r * 0.5f * kotlin.math.sin(a)).toFloat()))
+    }
+    drawCircle(Color(0xFFF2C94C), r * 0.3f, center)
+}
+
+private fun DrawScope.leaf(center: Offset, r: Float, color: Color, angle: Float) {
+    androidx.compose.ui.graphics.drawscope.rotate(angle, center) {
+        val p = Path().apply {
+            moveTo(center.x, center.y - r)
+            quadraticBezierTo(center.x + r * 0.9f, center.y, center.x, center.y + r)
+            quadraticBezierTo(center.x - r * 0.9f, center.y, center.x, center.y - r)
+            close()
+        }
+        drawPath(p, color)
+        drawLine(Color(0x66000000), Offset(center.x, center.y - r * 0.8f), Offset(center.x, center.y + r * 0.9f), strokeWidth = r * 0.08f)
     }
 }
 
@@ -167,6 +222,32 @@ fun SeasonDecor(modifier: Modifier) {
                     val twinkle = 0.35f + 0.65f * ((sin(t * 6.28f + s * 12f) + 1f) / 2f)
                     drawCircle(Color(0xFFFFE9A8).copy(alpha = twinkle), 1.5f + s * 2f, Offset(x * w, y * h * 0.4f))
                 }
+            }
+            Season.NEW_YEAR -> {
+                // Fireworks popping and fading in turn
+                listOf(Offset(0.2f, 0.16f) to Color(0xFFFFD166), Offset(0.78f, 0.12f) to Color(0xFFFF5C7A), Offset(0.55f, 0.28f) to Color(0xFF8C9BFF)).forEachIndexed { i, (p, c) ->
+                    val phase = (t + i / 3f) % 1f
+                    burst(Offset(p.x * w, p.y * h), (14f + phase * 26f) * density, c, (1f - phase).coerceIn(0f, 1f))
+                }
+            }
+            Season.SPRING -> seeds.take(18).forEach { (x, y, s) ->
+                val fall = (y + t * (0.4f + s * 0.4f)) % 1f
+                val drift = sin(t * 6.28f + s * 8f) * 14f
+                val r = (3f + s * 3f) * density / 2f
+                drawOval(Color(0xFFF7A8C8).copy(alpha = 0.55f + s * 0.4f), Offset(x * w + drift, fall * h), Size(r * 2.2f, r * 1.4f))
+            }
+            Season.SUMMER -> {
+                drawCircle(Brush.radialGradient(listOf(Color(0x66FFB347), Color.Transparent), Offset(w * 0.86f, h * 0.1f), w * 0.45f), w * 0.45f, Offset(w * 0.86f, h * 0.1f))
+                seeds.take(16).forEach { (x, y, s) ->
+                    val rise = (y - t * (0.15f + s * 0.2f) + 1f) % 1f
+                    drawCircle(Color(0xFFFFE0A8).copy(alpha = 0.25f + s * 0.4f), 1.5f + s * 2f, Offset(x * w, rise * h))
+                }
+            }
+            Season.AUTUMN -> seeds.take(12).forEachIndexed { i, (x, y, s) ->
+                val fall = (y + t * (0.35f + s * 0.35f)) % 1f
+                val drift = sin(t * 6.28f + s * 9f) * 18f
+                val colors = listOf(Color(0xFFE8890C), Color(0xFFB5541C), Color(0xFFF2C94C))
+                leaf(Offset(x * w + drift, fall * h), (6f + s * 4f) * density / 2f, colors[i % 3].copy(alpha = 0.85f), t * 360f + s * 200f)
             }
             Season.EVERYDAY -> Unit
         }

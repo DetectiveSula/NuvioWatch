@@ -4,7 +4,7 @@ import java.time.LocalDate
 import java.time.temporal.ChronoField
 
 /** The app's look for the time of year. */
-enum class Season { EVERYDAY, HALLOWEEN, CHRISTMAS, EASTER, EID }
+enum class Season { EVERYDAY, HALLOWEEN, CHRISTMAS, EASTER, EID, NEW_YEAR, SPRING, SUMMER, AUTUMN }
 
 /** Which seasonal theme is on for a date. Easter and Eid move every year, so they're worked out. */
 object Seasons {
@@ -13,6 +13,10 @@ object Seasons {
         isEaster(date) -> Season.EASTER
         date.monthValue == 10 -> Season.HALLOWEEN
         date.monthValue == 11 || date.monthValue == 12 -> Season.CHRISTMAS
+        date.monthValue == 1 && date.dayOfMonth <= 7 -> Season.NEW_YEAR
+        date.monthValue in 3..5 -> Season.SPRING
+        date.monthValue in 6..8 -> Season.SUMMER
+        date.monthValue == 9 -> Season.AUTUMN
         else -> Season.EVERYDAY
     }
 

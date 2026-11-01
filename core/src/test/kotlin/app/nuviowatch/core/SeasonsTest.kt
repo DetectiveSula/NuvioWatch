@@ -20,10 +20,16 @@ class SeasonsTest {
         assertEquals(Season.HALLOWEEN, Seasons.forDate(d("2026-10-31")))
         assertEquals(Season.CHRISTMAS, Seasons.forDate(d("2026-11-01")))
         assertEquals(Season.CHRISTMAS, Seasons.forDate(d("2026-12-31")))
-        assertEquals(Season.EVERYDAY, Seasons.forDate(d("2027-01-01")))
+        assertEquals(Season.NEW_YEAR, Seasons.forDate(d("2027-01-01")))
+        assertEquals(Season.NEW_YEAR, Seasons.forDate(d("2027-01-07")))
+        assertEquals(Season.EVERYDAY, Seasons.forDate(d("2027-01-08")))
+        assertEquals(Season.EVERYDAY, Seasons.forDate(d("2027-02-14")))
         assertEquals(Season.EASTER, Seasons.forDate(d("2026-03-29"))) // Palm Sunday
         assertEquals(Season.EASTER, Seasons.forDate(d("2026-04-06"))) // Easter Monday
-        assertEquals(Season.EVERYDAY, Seasons.forDate(d("2026-04-07")))
+        assertEquals(Season.SPRING, Seasons.forDate(d("2026-04-07")))
+        assertEquals(Season.SPRING, Seasons.forDate(d("2026-05-31")))
+        assertEquals(Season.SUMMER, Seasons.forDate(d("2026-07-15")))
+        assertEquals(Season.AUTUMN, Seasons.forDate(d("2026-09-10")))
     }
 
     @Test
@@ -31,7 +37,7 @@ class SeasonsTest {
         val fitr = LocalDate.from(java.time.chrono.HijrahDate.of(1447, 10, 1))
         assertEquals(Season.EID, Seasons.forDate(fitr))
         assertEquals(Season.EID, Seasons.forDate(fitr.plusDays(2)))
-        assertEquals(Season.EVERYDAY, Seasons.forDate(fitr.plusDays(3)))
+        assertEquals(Season.SPRING, Seasons.forDate(fitr.plusDays(3))) // late March 2026
         val adha = LocalDate.from(java.time.chrono.HijrahDate.of(1447, 12, 10))
         assertEquals(Season.EID, Seasons.forDate(adha))
     }
