@@ -134,7 +134,7 @@ fun TitleSheet(state: UiState, vm: MainViewModel, open: OpenTitle) {
                 watchers.chunked(2).forEach { pair ->
                     Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         pair.forEach { (p, v) ->
-                            val theirs = if (v.season != null && v.episode != null) v.season to v.episode else null
+                            val theirs: Pair<Int, Int>? = v.season?.let { s -> v.episode?.let { e -> s to e } }
                             val behind = mineEp != null && theirs != null && p.index != me && (theirs.first < mineEp.first || (theirs.first == mineEp.first && theirs.second < mineEp.second))
                             val ahead = mineEp != null && theirs != null && p.index != me && !behind && theirs != mineEp
                             Row(
