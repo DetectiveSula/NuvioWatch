@@ -76,7 +76,7 @@ object Notifier {
      * One notification per viewing session. Later activity in the same session
      * replaces it silently, so a long sitting ends up as a single, correct summary.
      */
-    fun showSummary(context: Context, profile: Profile, session: WatchSession, lines: List<SummaryLine>, poster: Bitmap?) {
+    fun showSummary(context: Context, profile: Profile, session: WatchSession, lines: List<SummaryLine>, poster: Bitmap?, silent: Boolean = session.isUpdate) {
         if (!canNotify(context) || lines.isEmpty()) return
         val main = lines.first()
         val builder = NotificationCompat.Builder(context, ALERTS)
@@ -90,7 +90,7 @@ object Notifier {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
-            .setSilent(session.isUpdate)
+            .setSilent(silent)
             .setWhen(session.lastActivityAt)
             .setShowWhen(true)
             .addAction(0, "Mute ${profile.name} today", MuteReceiver.intent(context, profile.index, session.notificationId))
@@ -164,6 +164,30 @@ object Notifier {
     }
 
     fun liveId(deviceId: String) = "live|$deviceId".hashCode()
+
+    /**
+     * "Mani is watching Marshals" from Nuvio's sync, for devices without Nuvio Watch. Uses the
+     * session's notification, so the summary later replaces it. Later updates change it quietly.
+     */
+    fun showSyncWatching(context: Context, id: Int, profile: Profile, title: String, details: String, popUp: Boolean, poster: Bitmap?) {
+        if (!canNotify(context)) return
+        val builder = NotificationCompat.Builder(context, personChannel(context, profile.index, profile.name))
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("${profile.name} is watching")
+            .setContentText(listOf(title, details).filter { it.isNotBlank() }.joinToString(" · "))
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setSilent(!popUp)
+            .setColor(0xFFFF5C7A.toInt())
+            .setContentIntent(openApp(context))
+            .setAutoCancel(true)
+            .setShowWhen(true)
+            .addAction(0, "Mute ${profile.name} today", MuteReceiver.intent(context, profile.index, id))
+        if (poster != null) builder.setLargeIcon(poster)
+        @Suppress("MissingPermission")
+        NotificationManagerCompat.from(context).notify(id, builder.build())
+    }
 
     /**
      * Android insists on a notification while the app works in the background. Turning its

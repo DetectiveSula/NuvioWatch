@@ -30,7 +30,18 @@ data class WatchSession(
     val items: List<SessionItem> = emptyList(),
     /** When the summary was last sent; later activity updates the same notification. */
     val notifiedAt: Long? = null,
+    /** The item of the newest progress update. */
+    val lastKey: String? = null,
+    /** When "is watching" last popped up (devices without Nuvio Watch). */
+    val watchingAt: Long? = null,
+    /** When to assume they've stopped: where the episode would have ended. */
+    val summaryDueAt: Long? = null,
+    /** When the summary was last sent. */
+    val summarizedAt: Long? = null,
 ) {
+    /** The film or episode of the newest update. */
+    val latest: SessionItem? get() = items.firstOrNull { it.progressKey == lastKey } ?: items.lastOrNull()
+
     val notificationId: Int get() = "session|$profileIndex|$startedAt".hashCode()
     val isUpdate: Boolean get() = notifiedAt != null
 }
@@ -90,7 +101,12 @@ class SessionTracker(
                 duration = event.duration,
             )
         }
-        session = session.copy(items = items.values.toList(), lastActivityAt = maxOf(session.lastActivityAt, latestAt))
+        val newest = fresh.maxBy { it.eventId }
+        session = session.copy(
+            items = items.values.toList(),
+            lastActivityAt = maxOf(session.lastActivityAt, latestAt),
+            lastKey = newest.progressKey.ifBlank { newest.videoId.ifBlank { newest.contentId } },
+        )
         return session
     }
 

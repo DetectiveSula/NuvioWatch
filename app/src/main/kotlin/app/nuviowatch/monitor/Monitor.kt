@@ -85,45 +85,76 @@ object Monitor {
 
             LiveReceiver.expire(context, now)
             val settings = prefs.settings.value
-            for ((index, session) in sessions.toMap()) {
-                if (tracker.isDue(session, now)) {
-                    // Still playing on a device with Nuvio Watch: its own summary comes the moment they stop.
+            for ((index, current) in sessions.toMap()) {
+                var session = current
+                val newActivity = tracker.isDue(session, now)
+                val endReached = session.summaryDueAt?.let { now >= it } == true
+                if (newActivity || endReached) {
+                    // Still playing on a device with Nuvio Watch: it sends its own alerts and summary.
                     val liveNow = prefs.liveDevices.values.any { d ->
                         d.state != app.nuviowatch.core.PlayState.STOPPED && now - d.at < 15 * 60_000L &&
                             app.nuviowatch.live.LiveHub.profileFor(d, graph.repository.snapshot.value, graph.titles.titles.value)?.index == index
                     }
                     if (liveNow) {
+                        sessions[index] = session.copy(notifiedAt = now, summaryDueAt = null)
                         if (tracker.isExpired(session, now)) sessions.remove(index)
                         continue
                     }
                     val profile = profiles.firstOrNull { it.index == index }
                     // Already summarised the moment they stopped, from live playback.
-                    // (Nuvio uploads progress when they stop, so a live summary of the same viewing is sent close to its end.)
                     val covered = prefs.liveCoveredAt(index) >= session.lastActivityAt - LIVE_COVER_MS
-                    if (covered) prefs.setStatus("summary", "Sync summary skipped: already sent when they stopped")
                     val allowed = !covered && profile != null && index !in settings.mutedProfiles && prefs.mutedUntil(index) <= now
-                    if (allowed) {
-                        session.items.distinctBy { it.contentId }.forEach { graph.titles.ensure(it.contentId, it.series) }
-                        val lines = SessionTracker.summarize(profile!!.name, session) { graph.titles[it]?.name }
-                        val poster = lines.firstOrNull()?.let { graph.titles[it.contentId]?.poster }
-                        if (QuietHours.isQuiet(prefs)) {
-                            lines.forEach { QuietHours.hold(prefs, it.title, it.text) }
-                        } else {
-                            Notifier.showSummary(context, profile, session, lines, Notifier.loadBitmap(context, poster))
+                    val latest = session.latest
+                    session.items.distinctBy { it.contentId }.forEach { graph.titles.ensure(it.contentId, it.series) }
+
+                    // Nuvio sends the same update for a skip, a pause and a stop. Unless they've finished,
+                    // say they're watching, and send the summary when the episode would have ended.
+                    if (newActivity && latest != null && !latest.completed && !covered) {
+                        val popUp = session.watchingAt == null || (session.summarizedAt ?: Long.MIN_VALUE) >= (session.watchingAt ?: Long.MIN_VALUE)
+                        if (allowed && !QuietHours.isQuiet(prefs)) {
+                            val info = graph.titles[latest.contentId]
+                            val details = listOfNotNull(
+                                app.nuviowatch.core.episodeLabel(latest.season, latest.episode),
+                                if (latest.duration > 0) "${(latest.position * 100 / latest.duration).coerceIn(0, 100)}%" else null,
+                            ).joinToString(" · ")
+                            Notifier.showSyncWatching(
+                                context, session.notificationId, profile!!, info?.name ?: latest.contentId, details, popUp,
+                                if (popUp) Notifier.loadBitmap(context, info?.poster) else null,
+                            )
+                            prefs.setStatus("alert", "Shown: ${profile.name} is watching (from Nuvio sync)")
                         }
-                    }
-                    // Ask the person who watched (on their own phone) how it was.
-                    if (index == prefs.deviceProfile) {
-                        session.items.filter { it.completed }.distinctBy { it.contentId }.forEach { item ->
-                            val key = "rate|$index|${item.contentId}"
-                            if (!prefs.isMarked(key)) {
-                                graph.titles.ensure(item.contentId, item.series)
-                                Notifier.showRatePrompt(context, index, item.contentId, graph.titles[item.contentId]?.name ?: item.contentId)
-                                prefs.mark(key)
+                        val remaining = if (latest.duration > 0) (latest.duration - latest.position).coerceAtLeast(0) else 30 * 60_000L
+                        session = session.copy(
+                            notifiedAt = now,
+                            watchingAt = if (popUp) now else session.watchingAt,
+                            summaryDueAt = session.lastActivityAt + remaining + END_MARGIN_MS,
+                        )
+                    } else {
+                        if (covered) prefs.setStatus("summary", "Sync summary skipped: already sent when they stopped")
+                        if (allowed) {
+                            val lines = SessionTracker.summarize(profile!!.name, session) { graph.titles[it]?.name }
+                            val poster = lines.firstOrNull()?.let { graph.titles[it.contentId]?.poster }
+                            if (QuietHours.isQuiet(prefs)) {
+                                lines.forEach { QuietHours.hold(prefs, it.title, it.text) }
+                            } else {
+                                Notifier.showSummary(context, profile, session, lines, Notifier.loadBitmap(context, poster), silent = false)
+                                prefs.setStatus("summary", "Shown from Nuvio sync: ${lines.firstOrNull()?.title.orEmpty()}")
                             }
                         }
+                        // Ask the person who watched (on their own phone) how it was.
+                        if (index == prefs.deviceProfile) {
+                            session.items.filter { it.completed }.distinctBy { it.contentId }.forEach { item ->
+                                val key = "rate|$index|${item.contentId}"
+                                if (!prefs.isMarked(key)) {
+                                    graph.titles.ensure(item.contentId, item.series)
+                                    Notifier.showRatePrompt(context, index, item.contentId, graph.titles[item.contentId]?.name ?: item.contentId)
+                                    prefs.mark(key)
+                                }
+                            }
+                        }
+                        session = session.copy(notifiedAt = now, summaryDueAt = null, summarizedAt = now)
                     }
-                    sessions[index] = session.copy(notifiedAt = now)
+                    sessions[index] = session
                 }
                 if (tracker.isExpired(session, now)) sessions.remove(index)
             }
@@ -188,4 +219,6 @@ object Monitor {
     private const val MIN_GAP_MS = 15_000L
     private const val PROFILE_REFRESH_MS = 60 * 60_000L
     private const val LIVE_COVER_MS = 15 * 60_000L
+    /** A few minutes after the episode would have ended (credits, a slow start). */
+    private const val END_MARGIN_MS = 3 * 60_000L
 }
