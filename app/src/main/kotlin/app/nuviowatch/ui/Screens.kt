@@ -195,6 +195,17 @@ fun NowScreen(state: UiState, vm: MainViewModel, onOpenSettings: () -> Unit) {
             item(key = "social-msg") { Text(msg, fontSize = 12.sp, color = TextMuted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
         }
         val recent = state.social.reactions.filter { state.clock - it.at < 3 * 3_600_000L }.takeLast(6).reversed()
+        if (others.isNotEmpty()) {
+            item(key = "others") {
+                Column(Modifier.padding(top = 18.dp)) {
+                    Text("Continue watching", style = display(20), modifier = Modifier.padding(start = 20.dp, bottom = 12.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
+                        items(others, key = { it.profile.index }) { OtherProfileCard(it, state) }
+                    }
+                }
+            }
+        }
+
         if (recent.isNotEmpty()) {
             item(key = "reactions") {
                 Column(Modifier.padding(top = 16.dp)) {
@@ -236,17 +247,6 @@ fun NowScreen(state: UiState, vm: MainViewModel, onOpenSettings: () -> Unit) {
 
         state.error?.let { error ->
             item(key = "error") { Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
-        }
-
-        if (others.isNotEmpty()) {
-            item(key = "others") {
-                Column(Modifier.padding(top = 18.dp)) {
-                    Text("Continue watching", style = display(20), modifier = Modifier.padding(start = 20.dp, bottom = 12.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
-                        items(others, key = { it.profile.index }) { OtherProfileCard(it, state) }
-                    }
-                }
-            }
         }
 
         item(key = "today") {
