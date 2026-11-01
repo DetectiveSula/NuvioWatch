@@ -198,7 +198,13 @@ fun NowScreen(state: UiState, vm: MainViewModel, onOpenSettings: () -> Unit) {
         if (others.isNotEmpty()) {
             item(key = "others") {
                 Column(Modifier.padding(top = 18.dp)) {
-                    Text("Continue watching", style = display(20), modifier = Modifier.padding(start = 20.dp, bottom = 12.dp))
+                    Row(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
+                        Text("Continue watching", style = display(20))
+                        LocalSeason.current.tagline()?.let {
+                            Spacer(Modifier.width(10.dp))
+                            Text(it, fontSize = 12.sp, color = LocalSeason.current.accent.copy(alpha = 0.95f), fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 3.dp))
+                        }
+                    }
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
                         items(others, key = { it.profile.index }) { OtherProfileCard(it, state) }
                     }
@@ -381,7 +387,7 @@ private fun ActionChip(label: String, onClick: () -> Unit) {
 private fun ReactionBar(onReact: (String) -> Unit) {
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        listOf("🔥", "😂", "😱", "😭", "💤", "👏", "❤️").forEach { e ->
+        LocalSeason.current.reactions.forEach { e ->
             Box(
                 Modifier.size(40.dp).clip(CircleShape).background(Color(0x26FFFFFF)).clickable(role = Role.Button, onClickLabel = "React $e") {
                     haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
@@ -420,12 +426,17 @@ private fun Hero(state: UiState, hero: ProfileNow?, tint: Color) {
                 ),
             ),
         )
+        SeasonHeroTouches()
 
         Row(
             Modifier.statusBarsPadding().fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Nuvio Watch", style = display(19), modifier = Modifier.weight(1f))
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                SeasonBadge()
+                if (LocalSeason.current.season != app.nuviowatch.core.Season.EVERYDAY) Spacer(Modifier.width(6.dp))
+                Text("Nuvio Watch", style = display(19))
+            }
             state.now.forEachIndexed { i, p ->
                 val isLive = AlertPolicy.liveState(p.latest, state.clock) == LiveState.ACTIVE_NOW
                 Box(Modifier.offset(x = (-8 * i).dp)) {
@@ -496,11 +507,16 @@ private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (Strin
                 Brush.verticalGradient(0f to Ink.copy(alpha = 0.6f), 0.22f to Color.Transparent, 0.38f to Color.Transparent, 0.62f to Ink.copy(alpha = 0.7f), 1f to Ink),
             ),
         )
+        SeasonHeroTouches()
         Row(
             Modifier.statusBarsPadding().fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Nuvio Watch", style = display(19), modifier = Modifier.weight(1f))
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                SeasonBadge()
+                if (LocalSeason.current.season != app.nuviowatch.core.Season.EVERYDAY) Spacer(Modifier.width(6.dp))
+                Text("Nuvio Watch", style = display(19))
+            }
             state.now.forEachIndexed { i, p ->
                 Box(Modifier.offset(x = (-8 * i).dp)) {
                     ProfileAvatar(p.profile, size = 28.dp, ring = if (p.profile.index == live.profile?.index) LiveRed else Ink)
@@ -513,17 +529,18 @@ private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (Strin
         ) {
             // A solid pill, so it's readable on any poster.
             Row(
-                Modifier.clip(RoundedCornerShape(50)).background(if (playing) LiveRed else Color(0xCC0A0910)).padding(horizontal = 10.dp, vertical = 5.dp),
+                Modifier.clip(RoundedCornerShape(50)).background(if (playing) LocalSeason.current.accent else Color(0xCC0A0910)).padding(horizontal = 10.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val pillText = if (playing) LocalSeason.current.onAccent else Color.White
                 if (playing) {
-                    Box(Modifier.size(7.dp).clip(CircleShape).background(Color.White))
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(pillText))
                     Spacer(Modifier.width(6.dp))
                 }
                 Text(
                     "${who.uppercase()} ${if (playing) "IS WATCHING" else "PAUSED"} · ${event.deviceName.uppercase()}",
                     style = Eyebrow,
-                    color = Color.White,
+                    color = pillText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -537,7 +554,10 @@ private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (Strin
                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(formatClock(position), style = MaterialTheme.typography.labelSmall, color = Color(0xFFD6D1E6))
                     Box(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                        ThinProgress(position.toFloat() / event.durationMs, if (playing) Color.White else TextMuted)
+                        ThinProgress(
+                            position.toFloat() / event.durationMs,
+                            if (!playing) TextMuted else if (LocalSeason.current.season == app.nuviowatch.core.Season.EVERYDAY) Color.White else LocalSeason.current.accent,
+                        )
                     }
                     Text(formatClock(event.durationMs), style = MaterialTheme.typography.labelSmall, color = Color(0xFFD6D1E6))
                 }
@@ -925,6 +945,8 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
                     OutlinedButton(onClick = { vm.checkNow() }, modifier = Modifier.padding(top = 8.dp)) { Text("Check now") }
                 }
             }
+
+            GlassCard { SeasonalThemesSwitch(state, vm) }
 
             GlassCard {
                 val (quietOn, quietStart, quietEnd) = state.quiet
@@ -1314,4 +1336,26 @@ private fun SettingSwitch(title: String, subtitle: String?, checked: Boolean, on
         Spacer(Modifier.width(12.dp))
         Switch(checked = checked, onCheckedChange = onChange)
     }
+}
+
+/** A seasonal glow behind the title and the season's decorations, over the hero picture. */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.SeasonHeroTouches() {
+    val season = LocalSeason.current
+    season.glow?.let { glow ->
+        Box(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(200.dp)
+                .background(Brush.radialGradient(listOf(glow, Color.Transparent))),
+        )
+    }
+    SeasonDecor(Modifier.matchParentSize())
+}
+
+@Composable
+private fun SeasonalThemesSwitch(state: UiState, vm: MainViewModel) {
+    SettingSwitch(
+        title = "Seasonal themes",
+        subtitle = "Halloween in October, Christmas in November and December, and Easter and Eid on their dates. Switches on by itself.",
+        checked = state.seasonalThemes,
+    ) { vm.setSeasonalThemes(it) }
 }

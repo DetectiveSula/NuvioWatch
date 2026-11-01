@@ -66,7 +66,13 @@ class MainActivity : ComponentActivity() {
                 when {
                     !state.signedIn -> SignInScreen(state, viewModel)
                     !state.onboarded -> OnboardingScreen(state, viewModel)
-                    else -> MainScreen(state, viewModel)
+                    else -> {
+                        // Halloween, Christmas, Easter or Eid, by the date (unless turned off in Settings).
+                        val season = remember(state.seasonalThemes, state.clock / 3_600_000) {
+                            if (state.seasonalThemes) SeasonStyle.of(app.nuviowatch.core.Seasons.forDate(java.time.LocalDate.now())) else SeasonStyle.EVERYDAY
+                        }
+                        androidx.compose.runtime.CompositionLocalProvider(LocalSeason provides season) { MainScreen(state, viewModel) }
+                    }
                 }
             }
         }

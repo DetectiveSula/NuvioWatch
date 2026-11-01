@@ -304,6 +304,9 @@ fun FloatingNav(items: List<NavItem>, selected: Int, onSelect: (Int) -> Unit, mo
             .padding(8.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        val season = LocalSeason.current
+        val activeBg = if (season.season == app.nuviowatch.core.Season.EVERYDAY) Color.White else season.accent
+        val activeFg = if (season.season == app.nuviowatch.core.Season.EVERYDAY) Ink else season.onAccent
         items.forEachIndexed { i, item ->
             val active = i == selected
             Row(
@@ -311,16 +314,16 @@ fun FloatingNav(items: List<NavItem>, selected: Int, onSelect: (Int) -> Unit, mo
                     .weight(if (active) 1.6f else 1f)
                     .height(46.dp)
                     .clip(RoundedCornerShape(23.dp))
-                    .background(if (active) Color.White else Color.Transparent)
+                    .background(if (active) activeBg else Color.Transparent)
                     .clickable(role = Role.Tab) { onSelect(i) }
                     .semantics { contentDescription = item.label },
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(item.icon, contentDescription = null, tint = if (active) Ink else Color(0xFFD6D1E6), modifier = Modifier.size(20.dp))
+                Icon(item.icon, contentDescription = null, tint = if (active) activeFg else Color(0xFFD6D1E6), modifier = Modifier.size(20.dp))
                 if (active) {
                     Spacer(Modifier.width(6.dp))
-                    Text(item.label, color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, softWrap = false)
+                    Text(item.label, color = activeFg, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, softWrap = false)
                 }
             }
         }

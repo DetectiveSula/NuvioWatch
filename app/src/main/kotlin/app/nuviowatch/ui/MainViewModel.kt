@@ -139,6 +139,7 @@ data class UiState(
     val freezeDays: Map<Int, Set<java.time.LocalDate>> = emptyMap(),
     /** Quiet hours: on, from hour, until hour. */
     val quiet: Triple<Boolean, Int, Int> = Triple(false, 23, 7),
+    val seasonalThemes: Boolean = true,
 ) {
     fun stats(profileIndex: Int?, range: StatsRange = StatsRange.MONTH): Stats = StatsCalculator.compute(
         viewings.filter { profileIndex == null || it.profileIndex == profileIndex },
@@ -159,6 +160,7 @@ data class UiState(
 }
 
 private data class Local(
+    val seasonalThemes: Boolean = true,
     val quiet: Triple<Boolean, Int, Int> = Triple(false, 23, 7),
     val freezeDays: Map<Int, Set<java.time.LocalDate>> = emptyMap(),
     val pendingWrapped: Int? = null,
@@ -239,6 +241,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             pendingWrapped = local.pendingWrapped,
             freezeDays = local.freezeDays,
             quiet = local.quiet,
+            seasonalThemes = local.seasonalThemes,
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
@@ -264,6 +267,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         activeDays = prefs.activeDays,
                         freezeDays = prefs.freezeDays,
                         quiet = Triple(prefs.quietOn, prefs.quietStart, prefs.quietEnd),
+                        seasonalThemes = prefs.seasonalThemes,
                         device = deviceSettings(),
                         statuses = statuses(),
                         social = it.social.copy(
@@ -512,6 +516,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             newlyAnnounced += p.id
         }
         if (newlyAnnounced.isNotEmpty()) prefs.announcedPredictions = announced + newlyAnnounced
+    }
+
+    fun setSeasonalThemes(on: Boolean) {
+        prefs.seasonalThemes = on
+        local.update { it.copy(seasonalThemes = on) }
     }
 
     fun setQuiet(on: Boolean? = null, start: Int? = null, end: Int? = null) {

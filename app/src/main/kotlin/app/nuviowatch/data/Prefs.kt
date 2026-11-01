@@ -163,6 +163,11 @@ class Prefs(context: Context) : SessionStore {
         get() = prefs.getString("held_summaries", null)?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrNull() }.orEmpty()
         set(value) = prefs.edit { putString("held_summaries", json.encodeToString(value)) }
 
+    /** Halloween, Christmas, Easter and Eid looks, switched on by the date. */
+    var seasonalThemes: Boolean
+        get() = prefs.getBoolean("seasonal_themes", true)
+        set(value) = prefs.edit { putBoolean("seasonal_themes", value) }
+
     var lastUpdateCheck: Long
         get() = prefs.getLong("last_update_check", 0)
         set(value) = prefs.edit { putLong("last_update_check", value) }
