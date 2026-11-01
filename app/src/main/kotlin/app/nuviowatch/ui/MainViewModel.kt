@@ -518,6 +518,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (newlyAnnounced.isNotEmpty()) prefs.announcedPredictions = announced + newlyAnnounced
     }
 
+    fun syncLog(): List<String> = prefs.syncLog
+
+    fun clearSyncLog() { prefs.syncLog = emptyList() }
+
     fun setSeasonalThemes(on: Boolean) {
         prefs.seasonalThemes = on
         local.update { it.copy(seasonalThemes = on) }

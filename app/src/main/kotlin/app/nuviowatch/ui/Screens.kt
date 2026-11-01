@@ -1117,6 +1117,7 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
                 }
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton(onClick = { vm.sendTest() }) { Text("Send test alert") }
+                SyncLog(vm)
                 state.testMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = TextMuted, modifier = Modifier.padding(top = 6.dp)) }
             }
 
@@ -1366,4 +1367,25 @@ private fun SeasonalThemesSwitch(state: UiState, vm: MainViewModel) {
         subtitle = "Halloween in October, Christmas in November and December, and Easter and Eid on their dates. Switches on by itself.",
         checked = state.seasonalThemes,
     ) { vm.setSeasonalThemes(it) }
+}
+
+/** Exactly what Nuvio sent recently, so a pause and a real stop can be compared. */
+@Composable
+private fun SyncLog(vm: MainViewModel) {
+    var open by remember { mutableStateOf(false) }
+    var lines by remember { mutableStateOf(emptyList<String>()) }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    Spacer(Modifier.height(14.dp))
+    TextButton(onClick = { lines = vm.syncLog(); open = !open }) { Text(if (open) "Hide Nuvio sync log" else "Show Nuvio sync log") }
+    if (open) {
+        Text("The last updates Nuvio sent, newest at the bottom.", style = MaterialTheme.typography.bodySmall, color = TextMuted)
+        if (lines.isEmpty()) Text("Nothing yet. Play something in Nuvio, pause, then stop.", style = MaterialTheme.typography.bodySmall)
+        lines.takeLast(12).forEach {
+            Text(it, style = MaterialTheme.typography.labelSmall, color = Color(0xFFC3CAFF), modifier = Modifier.padding(vertical = 3.dp))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(lines.joinToString("\n"))) }) { Text("Copy log") }
+            OutlinedButton(onClick = { vm.clearSyncLog(); lines = emptyList() }) { Text("Clear") }
+        }
+    }
 }

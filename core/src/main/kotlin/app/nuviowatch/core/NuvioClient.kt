@@ -91,26 +91,32 @@ class NuvioClient(
     }
 
     /** Every progress change after [sinceEventId], oldest first. */
+    /** Every field of the last progress updates read, exactly as Nuvio sent them (for troubleshooting). */
+    @Volatile var lastRawEvents: List<String> = emptyList()
+        private set
+
     suspend fun progressChanges(profileId: Int, sinceEventId: Long, pageSize: Int = 900): List<ProgressEvent> {
         val all = mutableListOf<ProgressEvent>()
+        val raw = mutableListOf<String>()
         var cursor = sinceEventId
         var pages = 0
         while (true) {
-            val events: List<ProgressEvent> = json.decodeFromJsonElement(
-                rpc(
-                    "sync_pull_watch_progress_delta",
-                    buildJsonObject {
-                        put("p_profile_id", profileId)
-                        put("p_since_event_id", cursor)
-                        put("p_limit", pageSize)
-                    },
-                ),
+            val element = rpc(
+                "sync_pull_watch_progress_delta",
+                buildJsonObject {
+                    put("p_profile_id", profileId)
+                    put("p_since_event_id", cursor)
+                    put("p_limit", pageSize)
+                },
             )
+            (element as? kotlinx.serialization.json.JsonArray)?.forEach { raw += it.toString() }
+            val events: List<ProgressEvent> = json.decodeFromJsonElement(element)
             if (events.isEmpty()) break
             all += events
             cursor = maxOf(cursor, events.maxOf { it.eventId })
             if (events.size < pageSize || ++pages >= MAX_PAGES) break
         }
+        lastRawEvents = raw
         return all.sortedBy { it.eventId }
     }
 

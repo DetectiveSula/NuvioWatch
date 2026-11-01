@@ -58,7 +58,14 @@ object Monitor {
                     continue
                 }
                 val events = try {
-                    client.progressChanges(profile.index, cursor).also { if (it.isNotEmpty()) prefs.setCursor(profile.index, it.maxOf { e -> e.eventId }) }
+                    client.progressChanges(profile.index, cursor).also {
+                        if (it.isNotEmpty()) prefs.setCursor(profile.index, it.maxOf { e -> e.eventId })
+                        // Keep exactly what Nuvio sent, to compare a pause with a real stop.
+                        if (client.lastRawEvents.isNotEmpty()) {
+                            val time = java.time.LocalTime.now().withNano(0)
+                            prefs.syncLog = prefs.syncLog + client.lastRawEvents.map { raw -> "$time · ${profile.name} · $raw" }
+                        }
+                    }
                 } catch (e: NuvioException) {
                     if (e.isAuthError) throw e
                     changesFromFullPull(context, client, profile.index)

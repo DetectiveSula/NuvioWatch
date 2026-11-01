@@ -168,6 +168,11 @@ class Prefs(context: Context) : SessionStore {
         get() = prefs.getBoolean("seasonal_themes", true)
         set(value) = prefs.edit { putBoolean("seasonal_themes", value) }
 
+    /** Recent raw progress updates from Nuvio, newest last (Settings > Status, for troubleshooting). */
+    var syncLog: List<String>
+        get() = prefs.getString("sync_log", null)?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrNull() }.orEmpty()
+        set(value) = prefs.edit { putString("sync_log", json.encodeToString(value.takeLast(30))) }
+
     var lastUpdateCheck: Long
         get() = prefs.getLong("last_update_check", 0)
         set(value) = prefs.edit { putLong("last_update_check", value) }
