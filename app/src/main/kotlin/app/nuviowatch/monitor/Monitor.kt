@@ -117,9 +117,12 @@ object Monitor {
                     // so wait a minute after the last update (a burst of pausing and skipping stays one
                     // summary), then send it. More updates later quietly update it.
                     if (newActivity && !covered) {
-                        val due = maxOf(session.lastActivityAt, now - SYNC_SUMMARY_DELAY_MS) + SYNC_SUMMARY_DELAY_MS
+                        // Reached the end (90%+): summary in a minute. Stopped partway (or just paused or
+                        // skipped): wait 10 minutes, so a skip or short pause doesn't send one early.
+                        val wait = if (session.latest?.completed == true) SYNC_SUMMARY_DELAY_MS else SYNC_SUMMARY_PARTWAY_MS
+                        val due = maxOf(session.lastActivityAt, now - SYNC_SUMMARY_DELAY_MS) + wait
                         session = session.copy(notifiedAt = now, summaryDueAt = due)
-                        prefs.setStatus("summary", "Nuvio reported ${profile?.name ?: "someone"}'s progress: summary in about a minute")
+                        prefs.setStatus("summary", "Nuvio reported ${profile?.name ?: "someone"}'s progress: summary " + if (session.latest?.completed == true) "in about a minute" else "in about 10 minutes")
                     } else {
                         if (covered) prefs.setStatus("summary", "Sync summary skipped: already sent when they stopped")
                         if (allowed) {
@@ -214,4 +217,6 @@ object Monitor {
     private const val LIVE_COVER_MS = 15 * 60_000L
     /** How long after Nuvio's last update the summary goes out, for devices without Nuvio Watch. */
     private const val SYNC_SUMMARY_DELAY_MS = 60_000L
+    /** The same, when they stopped partway: long enough that a skip or short pause doesn't count. */
+    private const val SYNC_SUMMARY_PARTWAY_MS = 10 * 60_000L
 }
