@@ -20,7 +20,9 @@ import kotlinx.coroutines.sync.withLock
  */
 object Monitor {
     private val mutex = Mutex()
-    private val tracker = SessionTracker()
+    // Nuvio only reports watching when someone pauses, skips or stops, so a summary goes out as soon
+    // as it does. If they carry on (the next episode), the same notification is quietly updated.
+    private val tracker = SessionTracker(quietMs = 0)
     private var profiles: List<Profile> = emptyList()
     private var profilesFetchedAt = 0L
 
@@ -85,6 +87,15 @@ object Monitor {
             val settings = prefs.settings.value
             for ((index, session) in sessions.toMap()) {
                 if (tracker.isDue(session, now)) {
+                    // Still playing on a device with Nuvio Watch: its own summary comes the moment they stop.
+                    val liveNow = prefs.liveDevices.values.any { d ->
+                        d.state != app.nuviowatch.core.PlayState.STOPPED && now - d.at < 15 * 60_000L &&
+                            app.nuviowatch.live.LiveHub.profileFor(d, graph.repository.snapshot.value, graph.titles.titles.value)?.index == index
+                    }
+                    if (liveNow) {
+                        if (tracker.isExpired(session, now)) sessions.remove(index)
+                        continue
+                    }
                     val profile = profiles.firstOrNull { it.index == index }
                     // Already summarised the moment they stopped, from live playback.
                     // (Nuvio uploads progress when they stop, so a live summary of the same viewing is sent close to its end.)

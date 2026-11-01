@@ -921,7 +921,7 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
             GlassCard {
                 SettingSwitch(
                     title = "Watching alerts",
-                    subtitle = "An alert when someone starts watching, and a summary the moment they stop.",
+                    subtitle = "An alert when someone starts watching, and a summary as soon as they stop.",
                     checked = state.settings.enabled,
                 ) { on ->
                     if (on && Build.VERSION.SDK_INT >= 33 && !Notifier.canNotify(context)) {
