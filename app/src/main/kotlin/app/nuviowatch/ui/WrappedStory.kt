@@ -266,10 +266,11 @@ private fun Opening(state: UiState, d: Data) {
     val people = d.w.perProfile.size
     Slide(Purple) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
-            val ids = d.plus.topTitles.map { it.contentId } + List(5) { null }
-            PosterTile(state, ids[1], 112.dp, 0, Modifier.align(Alignment.CenterStart).offset(y = (-10).dp).rotate(-9f))
-            PosterTile(state, ids[0], 136.dp, 1, Modifier.align(Alignment.Center).offset(y = (-30).dp).rotate(4f))
-            PosterTile(state, ids[2], 112.dp, 2, Modifier.align(Alignment.CenterEnd).offset(y = 10.dp).rotate(11f))
+            // Only real posters: early in a month there may be just one or two titles.
+            val ids = d.plus.topTitles.map { it.contentId }
+            ids.getOrNull(1)?.let { PosterTile(state, it, 112.dp, 0, Modifier.align(Alignment.CenterStart).offset(y = (-10).dp).rotate(-9f)) }
+            ids.getOrNull(0)?.let { PosterTile(state, it, 136.dp, 1, Modifier.align(Alignment.Center).offset(y = (-30).dp).rotate(4f)) }
+            ids.getOrNull(2)?.let { PosterTile(state, it, 112.dp, 2, Modifier.align(Alignment.CenterEnd).offset(y = 10.dp).rotate(11f)) }
         }
         Label("The Family Wrapped", Accent)
         // Shrink long month names (September) so they stay on one line.
@@ -351,7 +352,8 @@ private fun TopShows(state: UiState, d: Data) {
         Spacer(Modifier.weight(1f))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             // Podium order: 2nd, 1st, 3rd.
-            listOf(1, 0, 2).forEach { rank ->
+            // Podium order 2nd, 1st, 3rd, leaving out places nobody has yet.
+            listOf(1, 0, 2).filter { top.getOrNull(it) != null }.forEach { rank ->
                 val t = top.getOrNull(rank)
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     if (t != null) {

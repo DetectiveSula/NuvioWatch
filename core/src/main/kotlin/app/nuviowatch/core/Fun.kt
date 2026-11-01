@@ -622,7 +622,12 @@ object Fun {
         fun inside(v: Viewing, a: LocalDate, b: LocalDate) = v.atMs > 0 && v.watchedMs > 0 && date(v.atMs, zone).let { d -> !d.isBefore(a) && d.isBefore(b) }
         val inRange = viewings.filter { inside(it, from, untilExclusive) }
         val length = java.time.temporal.ChronoUnit.DAYS.between(from, untilExclusive)
-        val before = viewings.filter { inside(it, from.minusDays(length), from) }.sumOf { it.watchedMs }.takeIf { it > 0 }
+        // A period still going ("so far") is compared with the same number of days of the one before,
+        // and only once it's a few days in.
+        val today = date(nowMs, zone)
+        val elapsed = minOf(length, java.time.temporal.ChronoUnit.DAYS.between(from, today) + 1).coerceAtLeast(0)
+        val prevFrom = from.minusDays(length)
+        val before = if (elapsed < 3) null else viewings.filter { inside(it, prevFrom, prevFrom.plusDays(elapsed)) }.sumOf { it.watchedMs }.takeIf { it > 0 }
 
         val topTitles = inRange.groupBy { it.contentId }
             .map { (id, vs) -> WrappedTitle(id, vs.sumOf { it.watchedMs }, vs.map { it.profileIndex }.distinct().size) }

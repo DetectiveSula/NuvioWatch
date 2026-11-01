@@ -222,7 +222,7 @@ fun NowScreen(state: UiState, vm: MainViewModel, onOpenSettings: () -> Unit) {
         if (recent.isNotEmpty()) {
             item(key = "reactions") {
                 Column(Modifier.padding(top = 16.dp)) {
-                    Box(Modifier.padding(horizontal = 20.dp)) { SectionTitle("Reactions") }
+                    Column(Modifier.padding(horizontal = 20.dp)) { SectionTitle("Reactions") }
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
                         items(recent, key = { it.id }) { r ->
                             val to = r.toProfile?.let { state.profileName(it) } ?: "TV"
@@ -313,7 +313,7 @@ private fun heroTitleSize(name: String): Int = when {
 @Composable
 private fun DeviceStrip(state: UiState) {
     Column(Modifier.padding(top = 16.dp)) {
-        Box(Modifier.padding(horizontal = 20.dp)) { SectionTitle("Devices") }
+        Column(Modifier.padding(horizontal = 20.dp)) { SectionTitle("Devices") }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
             items(state.devices, key = { it.deviceId }) { d ->
                 val fresh = state.clock - d.at < 5 * 60_000L
