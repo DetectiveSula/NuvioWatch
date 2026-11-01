@@ -18,7 +18,7 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
-    <!-- Lets the app read the official Nuvio app's public server key if it is installed. -->
+    <!-- Lets the app check Nuvio is installed and open it on a title. -->
     <queries>
         <package android:name="com.nuvio.app" />
         <package android:name="com.nuvio.tv" />

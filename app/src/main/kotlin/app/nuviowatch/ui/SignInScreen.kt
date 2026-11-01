@@ -121,11 +121,7 @@ private fun ServerForm(state: UiState, vm: MainViewModel, onDone: () -> Unit) {
         Text("Couldn't find Nuvio's server key", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(6.dp))
         Text(
-            if (state.nuvioInstalled) {
-                "The key couldn't be read from the Nuvio app on this phone. Paste it below, or enter a self-hosted server address."
-            } else {
-                "Install the official Nuvio app on this phone and tap Try again, or paste the key below. For a self-hosted server, enter its address and leave the key empty."
-            },
+            "Paste Nuvio's public key below, or for a self-hosted server enter its address and leave the key empty.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
