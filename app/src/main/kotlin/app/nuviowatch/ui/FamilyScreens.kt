@@ -320,7 +320,8 @@ fun NameBadges(name: String, streak: Int, crowned: Boolean, fontSize: Int = 16, 
         )
         val small = (fontSize * 0.75f).coerceIn(11f, 18f).sp
         if (crowned) Text(" 👑", fontSize = small)
-        if (streak >= 2) {
+        // Same as the person's page: any current streak shows, from the first day.
+        if (streak >= 1) {
             Spacer(Modifier.width(4.dp))
             Text(
                 "🔥$streak",

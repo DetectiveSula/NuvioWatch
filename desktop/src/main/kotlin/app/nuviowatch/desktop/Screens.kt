@@ -332,7 +332,7 @@ fun NameBadges(name: String, streak: Int, crowned: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (crowned) Text(" 👑", fontSize = 13.sp)
-        if (streak >= 2) {
+        if (streak >= 1) {
             Spacer(Modifier.width(4.dp))
             Text(
                 "🔥$streak",
