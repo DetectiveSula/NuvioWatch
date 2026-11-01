@@ -133,7 +133,9 @@ object Monitor {
                     } else {
                         if (covered) prefs.setStatus("summary", "Sync summary skipped: already sent when they stopped")
                         if (allowed) {
-                            val lines = SessionTracker.summarize(profile!!.name, session) { graph.titles[it]?.name }
+                            // Sent because Nuvio went quiet partway through: they may still be watching.
+                            val unsure = session.latest?.completed != true
+                            val lines = SessionTracker.summarize(profile!!.name, session, unsure) { graph.titles[it]?.name }
                             val poster = lines.firstOrNull()?.let { graph.titles[it.contentId]?.poster }
                             if (QuietHours.isQuiet(prefs)) {
                                 lines.forEach { QuietHours.hold(prefs, it.title, it.text) }

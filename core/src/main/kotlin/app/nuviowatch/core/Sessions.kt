@@ -120,7 +120,11 @@ class SessionTracker(
 
     companion object {
         /** One line per title, biggest first: "Mani watched 3 episodes of X" / "S6 E1–E3 · 2h 10m". */
-        fun summarize(profileName: String, session: WatchSession, titleName: (String) -> String?): List<SummaryLine> =
+        /**
+         * [unsure]: we can't tell whether they stopped or are still watching (a device without Nuvio
+         * Watch that's gone quiet partway through), so unfinished items say "was watching … last seen at".
+         */
+        fun summarize(profileName: String, session: WatchSession, unsure: Boolean = false, titleName: (String) -> String?): List<SummaryLine> =
             session.items.groupBy { it.contentId }.map { (contentId, items) ->
                 val name = titleName(contentId) ?: contentId
                 val watched = items.sumOf { it.watchedMs }
@@ -129,17 +133,33 @@ class SessionTracker(
                     if (item.completed) {
                         SummaryLine(contentId, "$profileName finished $name", "${formatShort(watched)} watched", watched)
                     } else {
-                        SummaryLine(contentId, "$profileName watched $name", "${formatShort(watched)} · stopped at ${percent(item)}%", watched)
+                        if (unsure) {
+                            SummaryLine(contentId, "$profileName was watching $name", "last seen at ${percent(item)}%", watched)
+                        } else {
+                            SummaryLine(contentId, "$profileName watched $name", "${formatShort(watched)} · stopped at ${percent(item)}%", watched)
+                        }
                     }
                 } else {
                     val episodes = items.sortedWith(compareBy({ it.season ?: 0 }, { it.episode ?: 0 }))
                     if (episodes.size == 1) {
                         val e = episodes.single()
                         val where = episodeLabel(e.season, e.episode)
-                        val end = if (e.completed) "finished" else "stopped at ${percent(e)}%"
-                        SummaryLine(contentId, "$profileName watched $name", listOfNotNull(where, formatShort(watched), end).joinToString(" · "), watched)
+                        if (unsure && !e.completed) {
+                            SummaryLine(contentId, "$profileName was watching $name", listOfNotNull(where, "last seen at ${percent(e)}%").joinToString(" · "), watched)
+                        } else {
+                            val end = if (e.completed) "finished" else "stopped at ${percent(e)}%"
+                            SummaryLine(contentId, "$profileName watched $name", listOfNotNull(where, formatShort(watched), end).joinToString(" · "), watched)
+                        }
                     } else {
-                        SummaryLine(contentId, "$profileName watched ${episodes.size} episodes of $name", "${episodeRange(episodes)} · ${formatShort(watched)}", watched)
+                        val last = episodes.last()
+                        if (unsure && !last.completed) {
+                            SummaryLine(
+                                contentId, "$profileName was watching $name",
+                                "${episodeRange(episodes)} · last seen at ${percent(last)}% of ${episodeLabel(last.season, last.episode) ?: "the last one"}", watched,
+                            )
+                        } else {
+                            SummaryLine(contentId, "$profileName watched ${episodes.size} episodes of $name", "${episodeRange(episodes)} · ${formatShort(watched)}", watched)
+                        }
                     }
                 }
             }.sortedByDescending { it.watchedMs }
