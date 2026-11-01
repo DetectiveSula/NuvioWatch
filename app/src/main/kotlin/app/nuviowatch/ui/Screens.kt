@@ -446,7 +446,7 @@ private fun Hero(state: UiState, hero: ProfileNow?, tint: Color) {
             }
             state.now.forEachIndexed { i, p ->
                 val isLive = AlertPolicy.liveState(p.latest, state.clock) == LiveState.ACTIVE_NOW
-                Box(Modifier.offset(x = (-8 * i).dp)) {
+                Box(Modifier.offset(x = (8 * (state.now.size - 1 - i)).dp)) { // overlapping, and flush with the right edge
                     ProfileAvatar(p.profile, size = 28.dp, ring = if (isLive) LiveRed else Ink)
                 }
             }
@@ -525,7 +525,7 @@ private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (Strin
                 Text("Nuvio Watch", style = display(19))
             }
             state.now.forEachIndexed { i, p ->
-                Box(Modifier.offset(x = (-8 * i).dp)) {
+                Box(Modifier.offset(x = (8 * (state.now.size - 1 - i)).dp)) { // overlapping, and flush with the right edge
                     ProfileAvatar(p.profile, size = 28.dp, ring = if (p.profile.index == live.profile?.index) LiveRed else Ink)
                 }
             }
