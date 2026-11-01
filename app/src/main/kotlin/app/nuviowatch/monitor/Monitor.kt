@@ -111,31 +111,15 @@ object Monitor {
                     // Already summarised the moment they stopped, from live playback.
                     val covered = prefs.liveCoveredAt(index) >= session.lastActivityAt - LIVE_COVER_MS
                     val allowed = !covered && profile != null && index !in settings.mutedProfiles && prefs.mutedUntil(index) <= now
-                    val latest = session.latest
                     session.items.distinctBy { it.contentId }.forEach { graph.titles.ensure(it.contentId, it.series) }
 
-                    // Nuvio sends the same update for a skip, a pause and a stop. Unless they've finished,
-                    // say they're watching, and send the summary when the episode would have ended.
-                    if (newActivity && latest != null && !latest.completed && !covered) {
-                        val popUp = session.watchingAt == null || (session.summarizedAt ?: Long.MIN_VALUE) >= (session.watchingAt ?: Long.MIN_VALUE)
-                        if (allowed && !QuietHours.isQuiet(prefs)) {
-                            val info = graph.titles[latest.contentId]
-                            val details = listOfNotNull(
-                                app.nuviowatch.core.episodeLabel(latest.season, latest.episode),
-                                if (latest.duration > 0) "${(latest.position * 100 / latest.duration).coerceIn(0, 100)}%" else null,
-                            ).joinToString(" · ")
-                            Notifier.showSyncWatching(
-                                context, session.notificationId, profile!!, info?.name ?: latest.contentId, details, popUp,
-                                if (popUp) Notifier.loadBitmap(context, info?.poster) else null,
-                            )
-                            prefs.setStatus("alert", "Shown: ${profile.name} is watching (from Nuvio sync)")
-                        }
-                        val remaining = if (latest.duration > 0) (latest.duration - latest.position).coerceAtLeast(0) else 30 * 60_000L
-                        session = session.copy(
-                            notifiedAt = now,
-                            watchingAt = if (popUp) now else session.watchingAt,
-                            summaryDueAt = session.lastActivityAt + remaining + END_MARGIN_MS,
-                        )
+                    // Nuvio sends the same update for a pause and a stop, and nothing when someone resumes,
+                    // so wait a minute after the last update (a burst of pausing and skipping stays one
+                    // summary), then send it. More updates later quietly update it.
+                    if (newActivity && !covered) {
+                        val due = maxOf(session.lastActivityAt, now - SYNC_SUMMARY_DELAY_MS) + SYNC_SUMMARY_DELAY_MS
+                        session = session.copy(notifiedAt = now, summaryDueAt = due)
+                        prefs.setStatus("summary", "Nuvio reported ${profile?.name ?: "someone"}'s progress: summary in about a minute")
                     } else {
                         if (covered) prefs.setStatus("summary", "Sync summary skipped: already sent when they stopped")
                         if (allowed) {
@@ -144,7 +128,9 @@ object Monitor {
                             if (QuietHours.isQuiet(prefs)) {
                                 lines.forEach { QuietHours.hold(prefs, it.title, it.text) }
                             } else {
-                                Notifier.showSummary(context, profile, session, lines, Notifier.loadBitmap(context, poster), silent = false)
+                                // Pops up the first time; carrying on soon after updates it quietly.
+                                val recent = session.summarizedAt?.let { now - it < 30 * 60_000L } == true
+                                Notifier.showSummary(context, profile, session, lines, Notifier.loadBitmap(context, poster), silent = recent)
                                 prefs.setStatus("summary", "Shown from Nuvio sync: ${lines.firstOrNull()?.title.orEmpty()}")
                             }
                         }
@@ -226,6 +212,6 @@ object Monitor {
     private const val MIN_GAP_MS = 15_000L
     private const val PROFILE_REFRESH_MS = 60 * 60_000L
     private const val LIVE_COVER_MS = 15 * 60_000L
-    /** A few minutes after the episode would have ended (credits, a slow start). */
-    private const val END_MARGIN_MS = 3 * 60_000L
+    /** How long after Nuvio's last update the summary goes out, for devices without Nuvio Watch. */
+    private const val SYNC_SUMMARY_DELAY_MS = 60_000L
 }
