@@ -137,6 +137,8 @@ data class UiState(
     val pendingWrapped: Int? = null,
     /** Missed days covered by streak freezes. */
     val freezeDays: Map<Int, Set<java.time.LocalDate>> = emptyMap(),
+    /** Quiet hours: on, from hour, until hour. */
+    val quiet: Triple<Boolean, Int, Int> = Triple(false, 23, 7),
 ) {
     fun stats(profileIndex: Int?, range: StatsRange = StatsRange.MONTH): Stats = StatsCalculator.compute(
         viewings.filter { profileIndex == null || it.profileIndex == profileIndex },
@@ -157,6 +159,7 @@ data class UiState(
 }
 
 private data class Local(
+    val quiet: Triple<Boolean, Int, Int> = Triple(false, 23, 7),
     val freezeDays: Map<Int, Set<java.time.LocalDate>> = emptyMap(),
     val pendingWrapped: Int? = null,
     val activeDays: Map<Int, Set<java.time.LocalDate>> = emptyMap(),
@@ -235,6 +238,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             activeDays = local.activeDays,
             pendingWrapped = local.pendingWrapped,
             freezeDays = local.freezeDays,
+            quiet = local.quiet,
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
@@ -259,6 +263,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         liveDevices = prefs.liveDevices,
                         activeDays = prefs.activeDays,
                         freezeDays = prefs.freezeDays,
+                        quiet = Triple(prefs.quietOn, prefs.quietStart, prefs.quietEnd),
                         device = deviceSettings(),
                         statuses = statuses(),
                         social = it.social.copy(
@@ -507,6 +512,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             newlyAnnounced += p.id
         }
         if (newlyAnnounced.isNotEmpty()) prefs.announcedPredictions = announced + newlyAnnounced
+    }
+
+    fun setQuiet(on: Boolean? = null, start: Int? = null, end: Int? = null) {
+        on?.let { prefs.quietOn = it }
+        start?.let { prefs.quietStart = it }
+        end?.let { prefs.quietEnd = it }
+        local.update { it.copy(quiet = Triple(prefs.quietOn, prefs.quietStart, prefs.quietEnd)) }
     }
 
     fun openWrapped(monthsAgo: Int) = local.update { it.copy(pendingWrapped = monthsAgo) }

@@ -147,6 +147,22 @@ class Prefs(context: Context) : SessionStore {
     fun liveCoveredAt(profile: Int): Long = prefs.getLong("live_covered_$profile", 0)
     fun setLiveCoveredAt(profile: Int, at: Long) = prefs.edit { putLong("live_covered_$profile", at) }
 
+    /** Quiet hours: no alerts between [quietStart] and [quietEnd] (hours, 0–23); summaries wait until morning. */
+    var quietOn: Boolean
+        get() = prefs.getBoolean("quiet_on", false)
+        set(value) = prefs.edit { putBoolean("quiet_on", value) }
+    var quietStart: Int
+        get() = prefs.getInt("quiet_start", 23)
+        set(value) = prefs.edit { putInt("quiet_start", value) }
+    var quietEnd: Int
+        get() = prefs.getInt("quiet_end", 7)
+        set(value) = prefs.edit { putInt("quiet_end", value) }
+
+    /** Summaries held back during quiet hours, as "heading<TAB>details". */
+    var heldSummaries: List<String>
+        get() = prefs.getString("held_summaries", null)?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrNull() }.orEmpty()
+        set(value) = prefs.edit { putString("held_summaries", json.encodeToString(value)) }
+
     var lastUpdateCheck: Long
         get() = prefs.getLong("last_update_check", 0)
         set(value) = prefs.edit { putLong("last_update_check", value) }

@@ -86,7 +86,7 @@ object Inbox {
                 ReactionOverlay.show(context, r.emoji, r.fromName)
             } else if (r.toDeviceId == prefs.deviceId && ReactionOverlay.isTv(context)) {
                 ReactionOverlay.showMessage(context, r.emoji, r.fromName)
-            } else {
+            } else if (!app.nuviowatch.monitor.QuietHours.isQuiet(prefs)) {
                 Notifier.showReaction(context, r)
             }
         }

@@ -95,7 +95,11 @@ object Monitor {
                         session.items.distinctBy { it.contentId }.forEach { graph.titles.ensure(it.contentId, it.series) }
                         val lines = SessionTracker.summarize(profile!!.name, session) { graph.titles[it]?.name }
                         val poster = lines.firstOrNull()?.let { graph.titles[it.contentId]?.poster }
-                        Notifier.showSummary(context, profile, session, lines, Notifier.loadBitmap(context, poster))
+                        if (QuietHours.isQuiet(prefs)) {
+                            lines.forEach { QuietHours.hold(prefs, it.title, it.text) }
+                        } else {
+                            Notifier.showSummary(context, profile, session, lines, Notifier.loadBitmap(context, poster))
+                        }
                     }
                     // Ask the person who watched (on their own phone) how it was.
                     if (index == prefs.deviceProfile) {
@@ -116,6 +120,8 @@ object Monitor {
             prefs.liveEntries = live
             prefs.sessions = sessions
             prefs.lastPollError = null
+            // Quiet hours over: send what was watched overnight.
+            QuietHours.deliver(context)
             // New versions of Nuvio Watch, every 3 hours.
             if (now - prefs.lastUpdateCheck > 3 * 3_600_000L) {
                 prefs.lastUpdateCheck = now

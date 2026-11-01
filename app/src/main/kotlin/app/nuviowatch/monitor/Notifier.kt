@@ -361,6 +361,27 @@ object Notifier {
     fun showNewEpisode(context: Context, show: String, label: String) =
         simple(context, "ep|$show|$label".hashCode(), "🆕 New episode of $show today", label, RECAPS)
 
+    /** "While you were asleep": the summaries held back during quiet hours, in one notification. */
+    fun showOvernight(context: Context, lines: List<Pair<String, String>>) {
+        if (!canNotify(context) || lines.isEmpty()) return
+        val title = if (lines.size == 1) lines[0].first else "While you were asleep: ${lines.size} things watched"
+        val style = NotificationCompat.InboxStyle().setBigContentTitle("While you were asleep")
+        lines.takeLast(7).forEach { (heading, details) -> style.addLine(listOf(heading, details).filter { it.isNotBlank() }.joinToString(" · ")) }
+        val notification = NotificationCompat.Builder(context, RECAPS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(lines.joinToString(" · ") { it.first })
+            .setStyle(style)
+            .setColor(0xFF8C9BFF.toInt())
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setContentIntent(openApp(context))
+            .build()
+        @Suppress("MissingPermission")
+        NotificationManagerCompat.from(context).notify(62, notification)
+    }
+
     fun showReaction(context: Context, r: Reaction) {
         if (!canNotify(context)) return
         val notification = NotificationCompat.Builder(context, ALERTS)

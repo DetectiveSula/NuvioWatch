@@ -927,6 +927,30 @@ fun SettingsScreen(state: UiState, vm: MainViewModel) {
             }
 
             GlassCard {
+                val (quietOn, quietStart, quietEnd) = state.quiet
+                SettingSwitch(
+                    title = "Quiet hours",
+                    subtitle = "No alerts overnight. What people watched is saved and sent as one notification in the morning.",
+                    checked = quietOn,
+                ) { vm.setQuiet(on = it) }
+                if (quietOn) {
+                    fun label(h: Int) = when { h == 0 -> "12am"; h < 12 -> "${h}am"; h == 12 -> "12pm"; else -> "${h - 12}pm" }
+                    Spacer(Modifier.height(10.dp))
+                    Text("From", fontSize = 12.sp, color = TextMuted)
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(21, 22, 23, 0).forEach { h -> ChoicePill(label(h), quietStart == h) { vm.setQuiet(start = h) } }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text("Until", fontSize = 12.sp, color = TextMuted)
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(6, 7, 8, 9).forEach { h -> ChoicePill(label(h), quietEnd == h) { vm.setQuiet(end = h) } }
+                    }
+                }
+            }
+
+            GlassCard {
                 SectionTitle("Check every")
                 val options = listOf(30, 45, 60, 120)
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(Color(0x14FFFFFF)).padding(3.dp)) {

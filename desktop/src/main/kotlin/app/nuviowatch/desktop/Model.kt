@@ -264,6 +264,8 @@ object Model {
 
     private suspend fun onLive(event: LiveEvent) = liveLock.withLock {
         setStatus("received", "${event.deviceName}: ${event.state.name.lowercase()} · ${event.title}")
+        // Same show still playing (the next episode in a binge): no new alert.
+        val continuing = runs.states[event.deviceId]?.title == event.title && event.state != PlayState.STOPPED
         val change = tracker.apply(event)
         val finished = runs.apply(event)
         if (event.state == PlayState.PLAYING && event.profileIndex != null && !event.deviceId.startsWith("test-")) markActive(event.profileIndex!!, event.at)
@@ -271,7 +273,7 @@ object Model {
         liveDevices.value = tracker.states
         val fresh = System.currentTimeMillis() - event.at < 3 * 60_000L
         if (!fresh) return@withLock
-        if (change == LiveChange.STARTED) started(event)
+        if (change == LiveChange.STARTED && !continuing) started(event)
         if (finished != null) summarize(finished)
     }
 

@@ -26,6 +26,8 @@ object LiveReceiver {
     suspend fun onEvent(context: Context, id: String, event: LiveEvent) = mutex.withLock {
         val prefs = context.graph.prefs
         restore(context)
+        // Still on the same show (e.g. the next episode in a binge): update quietly instead of a new alert.
+        val continuing = runs.states[event.deviceId]?.title == event.title && event.state != PlayState.STOPPED
         val change = tracker.apply(event)
         val finished = runs.apply(event)
         // Only devices set to a person (Settings > This device), so a guess never gives someone a streak.
@@ -44,7 +46,7 @@ object LiveReceiver {
             if (ownDevice && !prefs.alertOwnDevice) {
                 prefs.setStatus("alert", "Skipped: playback on this device (turn on \"Also alert about this device\")")
             } else {
-                alert(context, event, change)
+                alert(context, event, change, continuing)
             }
         }
         if (fresh) {
@@ -97,6 +99,13 @@ object LiveReceiver {
         }
         val who = profile?.name ?: "Someone on ${run.deviceName}"
         val (heading, text) = LiveRuns.summarize(who, run)
+        if (app.nuviowatch.monitor.QuietHours.isQuiet(prefs)) {
+            // Kept for the morning instead of a notification now.
+            Notifier.cancel(context, id)
+            app.nuviowatch.monitor.QuietHours.hold(prefs, heading, "$text · on ${run.deviceName}")
+            prefs.setStatus("summary", "Quiet hours: saved for the morning ($heading)")
+            return
+        }
         val poster = Notifier.loadBitmap(context, LiveHub.titleFor(asEvent, titles)?.poster)
         // Its own notification, so the next "started watching" on this device doesn't replace it.
         Notifier.cancel(context, id)
@@ -124,12 +133,16 @@ object LiveReceiver {
         restored = true
     }
 
-    private suspend fun alert(context: Context, event: LiveEvent, change: LiveChange) {
+    private suspend fun alert(context: Context, event: LiveEvent, change: LiveChange, continuing: Boolean = false) {
         val graph = context.graph
         val prefs = graph.prefs
         val settings = prefs.settings.value
         if (!settings.enabled) {
             prefs.setStatus("alert", "Skipped: Watching alerts is off")
+            return
+        }
+        if (app.nuviowatch.monitor.QuietHours.isQuiet(prefs)) {
+            prefs.setStatus("alert", "Quiet hours: no alert")
             return
         }
         val titles = graph.titles.titles.value
@@ -148,14 +161,14 @@ object LiveReceiver {
         Notifier.showLive(
             context = context,
             event = event,
-            heading = if (change == LiveChange.STARTED) "$who started watching" else "$who stopped watching",
+            heading = if (continuing) "$who is still watching" else "$who started watching",
             profileIndex = profile?.index,
             poster = if (change == LiveChange.STARTED) Notifier.loadBitmap(context, title?.poster) else null,
-            silent = change == LiveChange.STOPPED || event.state != PlayState.PLAYING,
+            silent = continuing || event.state != PlayState.PLAYING,
             profileName = profile?.name,
             subtitleOverride = if (ahead > 0) "⚠️ $ahead episode${if (ahead == 1) "" else "s"} ahead of you, episode hidden" else null,
         )
-        if (change == LiveChange.STARTED && profile != null) {
+        if (change == LiveChange.STARTED && profile != null && !continuing) {
             sameShow(context, event, profile)
             suggestionStarted(context, event, profile)
         }
