@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -157,7 +158,13 @@ fun rememberImageTint(url: String?, fallback: Color = DefaultTint): Color {
 }
 
 /** Soft glow of [tint] behind the top of a screen. */
-fun Modifier.glow(tint: Color, alpha: Float = 0.55f): Modifier = drawBehind {
+fun Modifier.glow(tint: Color, alpha: Float = 0.55f): Modifier = composed {
+    // In a seasonal theme every page glows in the season's colour.
+    val pageTint = LocalSeason.current.pageTint ?: tint
+    glowWith(pageTint, alpha)
+}
+
+private fun Modifier.glowWith(tint: Color, alpha: Float): Modifier = drawBehind {
     val radius = size.width * 1.1f
     drawRect(
         Brush.radialGradient(

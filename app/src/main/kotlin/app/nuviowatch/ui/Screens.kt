@@ -107,7 +107,11 @@ private fun ScreenHeader(title: String, trailing: @Composable () -> Unit = {}) {
         Modifier.statusBarsPadding().fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = display(30), modifier = Modifier.weight(1f))
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            SeasonBadge(26.dp)
+            if (LocalSeason.current.seasonal) Spacer(Modifier.width(8.dp))
+            Text(title, style = display(30))
+        }
         trailing()
     }
 }
@@ -117,12 +121,15 @@ private fun ProfileChips(state: UiState, selected: Int?, onSelect: (Int?) -> Uni
     @Composable
     fun Chip(label: String, profile: Profile?, active: Boolean, onClick: () -> Unit) {
         val shape = RoundedCornerShape(50)
+        val season = LocalSeason.current
+        val activeBg = season.accentOr(Color.White)
+        val activeFg = if (season.seasonal) season.onAccent else Ink
         Row(
             Modifier
                 .height(36.dp)
                 .clip(shape)
-                .background(if (active) Color.White else Color.Transparent)
-                .border(1.dp, if (active) Color.White else Color(0x33FFFFFF), shape)
+                .background(if (active) activeBg else Color.Transparent)
+                .border(1.dp, if (active) activeBg else Color(0x33FFFFFF), shape)
                 .clickable(role = Role.Tab, onClick = onClick)
                 .padding(start = if (profile != null) 5.dp else 14.dp, end = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -131,7 +138,7 @@ private fun ProfileChips(state: UiState, selected: Int?, onSelect: (Int?) -> Uni
                 ProfileAvatar(profile, size = 26.dp)
                 Spacer(Modifier.width(8.dp))
             }
-            Text(label, color = if (active) Ink else TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            Text(label, color = if (active) activeFg else TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
         }
     }
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
@@ -766,6 +773,7 @@ fun StatsScreen(state: UiState) {
 /** Weeks as columns (Monday at the top), coloured by minutes watched. */
 @Composable
 private fun Heatmap(minutes: List<Long>) {
+    val heat = LocalSeason.current.accentOr(Accent)
     val max = (minutes.maxOrNull() ?: 0L).coerceAtLeast(1L)
     val padded = minutes + List((7 - minutes.size % 7) % 7) { -1L }
     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -782,9 +790,9 @@ private fun Heatmap(minutes: List<Long>) {
                     val color = when {
                         m < 0 -> Color.Transparent
                         m == 0L -> Color(0x14FFFFFF)
-                        m <= max / 3 -> Accent.copy(alpha = 0.3f)
-                        m <= max * 2 / 3 -> Accent.copy(alpha = 0.6f)
-                        else -> Accent
+                        m <= max / 3 -> heat.copy(alpha = 0.3f)
+                        m <= max * 2 / 3 -> heat.copy(alpha = 0.6f)
+                        else -> heat
                     }
                     Box(Modifier.fillMaxWidth().height(20.dp).clip(RoundedCornerShape(5.dp)).background(color))
                 }

@@ -38,7 +38,16 @@ data class SeasonStyle(
     /** A soft glow behind the hero's title, if any. */
     val glow: Color?,
     val reactions: List<String>,
+    /** The glow at the top of every page (null: each page's usual colour). */
+    val pageTint: Color? = null,
+    /** Wrapped tiles and other big gradient cards. */
+    val tiles: List<Color> = listOf(Color(0xFF5B3FD1), Color(0xFFFF5C7A)),
 ) {
+    val seasonal: Boolean get() = season != Season.EVERYDAY
+
+    /** The season's accent, or [default] on everyday days. */
+    fun accentOr(default: Color): Color = if (seasonal) accent else default
+
     /** A short line next to "Continue watching", e.g. "54 days to Christmas". */
     fun tagline(today: LocalDate = LocalDate.now()): String? = when (season) {
         Season.HALLOWEEN -> if (today.dayOfMonth == 31) "Happy Halloween" else "Spooky season"
@@ -62,7 +71,21 @@ data class SeasonStyle(
     companion object {
         val EVERYDAY = SeasonStyle(Season.EVERYDAY, LiveRed, Color.White, null, listOf("🔥", "😂", "😱", "😭", "💤", "👏", "❤️"))
 
-        fun of(season: Season): SeasonStyle = when (season) {
+        fun of(season: Season): SeasonStyle = base(season).let {
+            when (season) {
+                Season.HALLOWEEN -> it.copy(pageTint = Color(0xFF6B2FA0), tiles = listOf(Color(0xFF6B2FA0), Color(0xFFFF7A1A)))
+                Season.CHRISTMAS -> it.copy(pageTint = Color(0xFFD62F3F), tiles = listOf(Color(0xFF1F8A5B), Color(0xFFD62F3F)))
+                Season.EASTER -> it.copy(pageTint = Color(0xFFF7A8C8), tiles = listOf(Color(0xFFB9A7FF), Color(0xFFF7A8C8)))
+                Season.EID -> it.copy(pageTint = Color(0xFF1F8A5B), tiles = listOf(Color(0xFF0F5A3C), Color(0xFFD4AF37)))
+                Season.NEW_YEAR -> it.copy(pageTint = Color(0xFF2B4FD1), tiles = listOf(Color(0xFF1B2A6B), Color(0xFFD4AF37)))
+                Season.SPRING -> it.copy(pageTint = Color(0xFF7CE0C3), tiles = listOf(Color(0xFF2E9A78), Color(0xFFF7A8C8)))
+                Season.SUMMER -> it.copy(pageTint = Color(0xFFFF6B57), tiles = listOf(Color(0xFFFF6B57), Color(0xFFFFB347)))
+                Season.AUTUMN -> it.copy(pageTint = Color(0xFFB5541C), tiles = listOf(Color(0xFF8A3B1A), Color(0xFFE8890C)))
+                Season.EVERYDAY -> it
+            }
+        }
+
+        private fun base(season: Season): SeasonStyle = when (season) {
             Season.HALLOWEEN -> SeasonStyle(season, Color(0xFFFF7A1A), Color(0xFF1A0A00), Color(0x47FF7A1A), listOf("🎃", "😂", "😱", "👻", "💤", "👏", "🦇"))
             Season.CHRISTMAS -> SeasonStyle(season, Color(0xFFD62F3F), Color.White, null, listOf("🎄", "😂", "😱", "😭", "⛄", "👏", "❤️"))
             Season.EASTER -> SeasonStyle(season, Color(0xFFF2C94C), Color(0xFF2A1E00), Color(0x3DF7A8C8), listOf("🐣", "😂", "😱", "😭", "🐰", "👏", "🥚"))

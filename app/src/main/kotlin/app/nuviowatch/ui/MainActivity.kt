@@ -43,6 +43,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -151,7 +153,24 @@ private fun MainScreenContent(state: UiState, vm: MainViewModel) {
 
     val content: @Composable (Int) -> Unit = { current ->
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-            Box(Modifier.widthIn(max = MAX_CONTENT_WIDTH).fillMaxSize()) { screen(current) }
+            Box(Modifier.widthIn(max = MAX_CONTENT_WIDTH).fillMaxSize()) {
+                screen(current)
+                // A light touch of the season at the top of the other pages (Now has it over its picture).
+                if (current != 0 && LocalSeason.current.seasonal) {
+                    SeasonDecor(
+                        Modifier.fillMaxWidth().height(170.dp)
+                            .graphicsLayer { alpha = 0.55f; compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+                            .drawWithContent {
+                                drawContent()
+                                // Fade out downwards, so it never sits over what you're reading.
+                                drawRect(
+                                    androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Black, Color.Transparent)),
+                                    blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
+                                )
+                            },
+                    )
+                }
+            }
         }
     }
 

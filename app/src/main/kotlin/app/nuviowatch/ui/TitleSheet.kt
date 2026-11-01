@@ -109,9 +109,13 @@ fun TitleSheet(state: UiState, vm: MainViewModel, open: OpenTitle) {
                     modifier = Modifier.padding(bottom = 12.dp).clip(RoundedCornerShape(50)).background(Color(0x24FFD166)).padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
+            val theme = LocalSeason.current
             Button(
                 onClick = { openInNuvio(context, open.contentId, open.series) },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Ink),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = theme.accentOr(Color.White),
+                    contentColor = if (theme.seasonal) theme.onAccent else Ink,
+                ),
                 modifier = Modifier.fillMaxWidth().height(50.dp),
             ) {
                 Text(
@@ -173,9 +177,9 @@ fun TitleSheet(state: UiState, vm: MainViewModel, open: OpenTitle) {
                         val s = seasons[i]
                         Text(
                             "Season $s",
-                            modifier = Modifier.clip(RoundedCornerShape(50)).background(if (s == season) Color.White else Color(0x1FFFFFFF))
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(if (s == season) LocalSeason.current.accentOr(Color.White) else Color(0x1FFFFFFF))
                                 .clickable { season = s }.padding(horizontal = 14.dp, vertical = 8.dp),
-                            color = if (s == season) Ink else Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                            color = if (s == season) (if (LocalSeason.current.seasonal) LocalSeason.current.onAccent else Ink) else Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                         )
                     }
                 }
@@ -195,7 +199,7 @@ fun TitleSheet(state: UiState, vm: MainViewModel, open: OpenTitle) {
                                 coil.compose.AsyncImage(model = it, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.matchParentSize())
                             }
                             if (mine != null) {
-                                androidx.compose.foundation.layout.Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(if (mine.completed) 1f else mine.fraction).height(3.dp).background(Color(0xFFFF5C7A)))
+                                androidx.compose.foundation.layout.Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(if (mine.completed) 1f else mine.fraction).height(3.dp).background(LocalSeason.current.accent))
                             }
                         }
                         Spacer(Modifier.width(12.dp))

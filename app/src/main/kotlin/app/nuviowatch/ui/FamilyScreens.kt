@@ -130,7 +130,9 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
     var tab by rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
 
     Column(Modifier.fillMaxSize().glow(Color(0xFF7A3A6B), 0.45f).verticalScroll(rememberScrollState())) {
-        Row(Modifier.statusBarsPadding().padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
+        Row(Modifier.statusBarsPadding().padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            SeasonBadge(26.dp)
+            if (LocalSeason.current.seasonal) Spacer(Modifier.width(8.dp))
             Text("Family", style = display(30))
         }
 
@@ -147,7 +149,7 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
                         Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(22.dp))
-                            .background(Brush.linearGradient(listOf(Color(0xFF5B3FD1), Color(0xFFFF5C7A))))
+                            .background(Brush.linearGradient(LocalSeason.current.tiles))
                             .clickable(role = Role.Button) { onStory(monthsAgo) }
                             .padding(16.dp),
                     ) {
@@ -181,7 +183,8 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
                         Column(Modifier.weight(1f)) {
                             NameBadges(p.name, streaks[p.index] ?: 0, p.index == champion)
                             Spacer(Modifier.height(5.dp))
-                            ThinProgress(entry.points.toFloat() / top, visibleOnDark(parseColor(p.avatarColorHex)), height = 6.dp, track = Color(0x14FFFFFF))
+                            val barColor = if (rank == 0 && LocalSeason.current.seasonal) LocalSeason.current.accent else visibleOnDark(parseColor(p.avatarColorHex))
+                            ThinProgress(entry.points.toFloat() / top, barColor, height = 6.dp, track = Color(0x14FFFFFF))
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(horizontalAlignment = Alignment.End) {
@@ -922,7 +925,7 @@ private fun FamilyTabs(selected: Int, onSelect: (Int) -> Unit) {
                 }
             }
             Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(1.dp).background(Color(0x1AFFFFFF)))
-            Box(Modifier.align(Alignment.BottomStart).offset(x = offset).width(tabWidth).height(3.dp).clip(RoundedCornerShape(2.dp)).background(LiveRed))
+            Box(Modifier.align(Alignment.BottomStart).offset(x = offset).width(tabWidth).height(3.dp).clip(RoundedCornerShape(2.dp)).background(LocalSeason.current.accent))
         }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center) {
             FAMILY_TABS.indices.forEach { i ->
