@@ -420,8 +420,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         local.update { it.copy(onboarded = true) }
     }
 
-    fun openTitle(contentId: String, series: Boolean) =
+    fun openTitle(contentId: String, series: Boolean) {
         local.update { it.copy(social = it.social.copy(openTitle = OpenTitle(contentId, series))) }
+        // The title page lists episodes; fetch them if this show's aren't loaded yet.
+        if (series) viewModelScope.launch { runCatching { graph.episodes.ensure(listOf(contentId)) } }
+    }
 
     fun closeTitle() = local.update { it.copy(social = it.social.copy(openTitle = null)) }
 

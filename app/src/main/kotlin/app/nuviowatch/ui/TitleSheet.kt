@@ -75,26 +75,149 @@ fun TitleSheet(state: UiState, vm: MainViewModel, open: OpenTitle) {
     val reached = me?.let { Fun.latestEpisode(state.viewings, it, open.contentId) }
     val (comments, hidden) = Social.visibleComments(state.social.comments, open.contentId, reached)
 
-    ModalBottomSheet(onDismissRequest = { vm.closeTitle() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = Color(0xFF15131D)) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 24.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Poster(info?.poster, width = 72.dp, corner = 12.dp)
-                Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(name, style = display(24), maxLines = 3)
-                    Text(listOfNotNull(info?.year, info?.genres?.take(3)?.joinToString(", ")).joinToString(" · "), color = TextMuted, fontSize = 13.sp)
-                    if (score != null) {
-                        Text("⭐ %.1f family score · %d rating%s".format(score.first, score.second.size, if (score.second.size == 1) "" else "s"), color = Color(0xFFFFD166), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    val myLatest = me?.let { m -> state.snapshot.progress[m].orEmpty().filter { it.contentId == open.contentId }.maxByOrNull { it.lastWatchedMs } }
+    ModalBottomSheet(
+        onDismissRequest = { vm.closeTitle() },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Ink,
+        dragHandle = null,
+    ) {
+        Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 24.dp)) {
+            // Backdrop header
+            androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(300.dp)) {
+                coil.compose.AsyncImage(
+                    model = info?.background ?: info?.poster,
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.matchParentSize(),
+                )
+                androidx.compose.foundation.layout.Box(
+                    Modifier.matchParentSize().background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(0f to Color(0x800A0910), 0.25f to Color.Transparent, 0.5f to Color.Transparent, 1f to Ink),
+                    ),
+                )
+                Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 12.dp)) {
+                    Text(name, style = display(30), maxLines = 3, color = Color.White)
+                    Text(listOfNotNull(info?.year, info?.genres?.take(3)?.joinToString(", ")).joinToString(" · "), color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
+                }
+            }
+            Column(Modifier.padding(horizontal = 20.dp)) {
+            if (score != null) {
+                Text(
+                    "★ %.1f family score · %d rating%s".format(score.first, score.second.size, if (score.second.size == 1) "" else "s"),
+                    color = Color(0xFFFFD166), fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(bottom = 12.dp).clip(RoundedCornerShape(50)).background(Color(0x24FFD166)).padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+            Button(
+                onClick = { openInNuvio(context, open.contentId, open.series) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Ink),
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+            ) {
+                Text(
+                    when {
+                        myLatest == null -> "▶ Play in Nuvio"
+                        myLatest.isCompleted -> "▶ Watch again in Nuvio"
+                        else -> "▶ Resume " + (episodeLabel(myLatest.season, myLatest.episode)?.let { "$it " } ?: "") + "in Nuvio"
+                    },
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+
+            // Who's watching it, and how far each person has got
+            val watchers = state.snapshot.profiles.mapNotNull { p ->
+                state.viewings.filter { it.profileIndex == p.index && it.contentId == open.contentId }.maxByOrNull { it.atMs }?.let { p to it }
+            }.sortedByDescending { it.second.atMs }
+            if (watchers.isNotEmpty()) {
+                SheetLabel("Who's watching it")
+                val mineEp = reached
+                watchers.chunked(2).forEach { pair ->
+                    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        pair.forEach { (p, v) ->
+                            val theirs = if (v.season != null && v.episode != null) v.season to v.episode else null
+                            val behind = mineEp != null && theirs != null && p.index != me && (theirs.first < mineEp.first || (theirs.first == mineEp.first && theirs.second < mineEp.second))
+                            val ahead = mineEp != null && theirs != null && p.index != me && !behind && theirs != mineEp
+                            Row(
+                                Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(Color(0x0FFFFFFF)).padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                ProfileAvatar(p, size = 34.dp)
+                                Spacer(Modifier.width(10.dp))
+                                Column {
+                                    Text(if (p.index == me) "You" else p.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text(
+                                        listOfNotNull(
+                                            // Don't spoil: only say they're ahead, not where.
+                                            if (ahead) "ahead of you" else episodeLabel(v.season, v.episode),
+                                            if (v.completed) "done" else "${(v.fraction * 100).toInt()}%",
+                                            if (behind) "behind" else null,
+                                        ).joinToString(" · "),
+                                        fontSize = 12.sp, color = TextMuted,
+                                    )
+                                }
+                            }
+                        }
+                        if (pair.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
-            Button(
-                onClick = { openInNuvio(context, open.contentId, open.series) },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Ink),
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-            ) { Text("▶ Open in Nuvio") }
+            // Episodes
+            val episodes = state.episodes[open.contentId].orEmpty().filter { it.season > 0 }
+            if (open.series && episodes.isNotEmpty()) {
+                val seasons = episodes.map { it.season }.distinct().sorted()
+                var season by rememberSaveable(open.contentId) { mutableStateOf(reached?.first?.takeIf { it in seasons } ?: seasons.last()) }
+                SheetLabel("Episodes")
+                androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(seasons.size) { i ->
+                        val s = seasons[i]
+                        Text(
+                            "Season $s",
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(if (s == season) Color.White else Color(0x1FFFFFFF))
+                                .clickable { season = s }.padding(horizontal = 14.dp, vertical = 8.dp),
+                            color = if (s == season) Ink else Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                val now = state.clock
+                episodes.filter { it.season == season }.sortedBy { it.episode }.forEach { e ->
+                    val watchedBy = state.snapshot.profiles.filter { p ->
+                        state.viewings.any { it.profileIndex == p.index && it.contentId == open.contentId && it.season == e.season && it.episode == e.episode && it.completed }
+                    }
+                    val mine = me?.let { m -> state.viewings.firstOrNull { it.profileIndex == m && it.contentId == open.contentId && it.season == e.season && it.episode == e.episode } }
+                    val future = e.releasedMs != null && e.releasedMs!! > now
+                    // Titles of episodes past where you are stay hidden, so the list can't spoil anything.
+                    val spoiler = reached != null && (e.season > reached.first || (e.season == reached.first && e.episode > reached.second + 1))
+                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.foundation.layout.Box(Modifier.width(120.dp).height(68.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF221F2E))) {
+                            e.thumbnail?.takeIf { !spoiler }?.let {
+                                coil.compose.AsyncImage(model = it, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.matchParentSize())
+                            }
+                            if (mine != null) {
+                                androidx.compose.foundation.layout.Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(if (mine.completed) 1f else mine.fraction).height(3.dp).background(Color(0xFFFF5C7A)))
+                            }
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "${e.episode}. " + (if (spoiler) "Episode ${e.episode}" else e.title ?: "Episode ${e.episode}"),
+                                fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 2,
+                            )
+                            Text(
+                                when {
+                                    future -> "Out " + java.time.Instant.ofEpochMilli(e.releasedMs!!).atZone(java.time.ZoneId.systemDefault()).toLocalDate().format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM"))
+                                    mine?.completed == true -> "Watched" + if (watchedBy.size > 1) " · ${watchedBy.size} of you" else ""
+                                    mine != null -> "You're ${(mine.fraction * 100).toInt()}% in"
+                                    watchedBy.isNotEmpty() -> "Watched by " + watchedBy.joinToString { it.name }
+                                    else -> ""
+                                },
+                                fontSize = 12.sp, color = TextMuted,
+                            )
+                        }
+                    }
+                }
+            }
 
             // Rating
             SheetLabel("Your rating")
@@ -157,6 +280,7 @@ fun TitleSheet(state: UiState, vm: MainViewModel, open: OpenTitle) {
             TextButton(onClick = { vm.comment(open.contentId, draft); draft = "" }, enabled = draft.isNotBlank()) { Text("Send") }
             if (open.series) {
                 Text("Comments are tagged with the episode you're on, so they stay hidden from anyone behind you.", fontSize = 11.sp, color = TextMuted)
+            }
             }
         }
     }

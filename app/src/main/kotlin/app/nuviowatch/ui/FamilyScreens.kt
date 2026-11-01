@@ -5,6 +5,8 @@ package app.nuviowatch.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -125,13 +127,17 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
     }
     var pickFor by rememberSaveable { mutableStateOf(profiles.firstOrNull()?.index) }
     val names = profiles.associate { it.index to it.name }
+    var tab by rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
 
     Column(Modifier.fillMaxSize().glow(Color(0xFF7A3A6B), 0.45f).verticalScroll(rememberScrollState())) {
         Row(Modifier.statusBarsPadding().padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
             Text("Family", style = display(30))
         }
 
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(
+            Modifier.padding(horizontal = 16.dp).swipeTabs(tab, FAMILY_TABS.size) { tab = it },
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
             // Wrapped
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 listOf(0, 1, YEAR).forEach { monthsAgo ->
@@ -152,6 +158,9 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
                 }
             }
 
+            FamilyTabs(tab) { tab = it }
+
+            if (tab == 0) {
             // Weekly leaderboard
             GlassCard(Modifier.capturable(boardShare), padding = 18.dp) {
                 Row(verticalAlignment = Alignment.Bottom) {
@@ -194,13 +203,14 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
                 ShareButton(boardShare, "Share leaderboard", "This week's Nuvio leaderboard")
             }
 
-            RouletteCard(state)
-            PartyCard(state, vm)
+            }
+
+            if (tab == 1) PlayTiles(state, vm)
+
+            if (tab == 2) {
             SuggestedCard(state)
-            ChallengesCard(state)
             NewEpisodesCard(state)
             BestRatedCard(state)
-            PredictionsCard(state, vm)
 
             // Up next
             val queue = remember(state.viewings, state.episodes, state.clock / 3_600_000) { Fun.upNext(state.viewings, state.episodes, state.clock) }
@@ -242,6 +252,9 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
                 }
             }
 
+            }
+
+            if (tab == 3) {
             // Abandoned
             val abandoned = remember(state.viewings, state.clock / 3_600_000) { Fun.abandoned(state.viewings, state.clock).take(8) }
             if (abandoned.isNotEmpty()) {
@@ -269,6 +282,7 @@ private fun FamilyHome(state: UiState, vm: MainViewModel, onPerson: (Int) -> Uni
                         repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
+            }
             }
         }
         Spacer(Modifier.navigationBarsPadding().height(110.dp))
@@ -882,3 +896,100 @@ private fun BestRatedCard(state: UiState) {
         }
     }
 }
+
+// ---------------------------------------------------------------- Family tabs
+
+private val FAMILY_TABS = listOf("This week", "Play", "For you", "People")
+
+/** Tabs with a sliding underline and page dots. */
+@Composable
+private fun FamilyTabs(selected: Int, onSelect: (Int) -> Unit) {
+    Column {
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val tabWidth = maxWidth / FAMILY_TABS.size
+            val offset by androidx.compose.animation.core.animateDpAsState(tabWidth * selected, label = "tab")
+            Row(Modifier.fillMaxWidth()) {
+                FAMILY_TABS.forEachIndexed { i, label ->
+                    Text(
+                        label,
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable(role = Role.Tab) { onSelect(i) }.padding(vertical = 12.dp),
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = if (i == selected) Color.White else Color(0xFF8F89A3),
+                    )
+                }
+            }
+            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(1.dp).background(Color(0x1AFFFFFF)))
+            Box(Modifier.align(Alignment.BottomStart).offset(x = offset).width(tabWidth).height(3.dp).clip(RoundedCornerShape(2.dp)).background(LiveRed))
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center) {
+            FAMILY_TABS.indices.forEach { i ->
+                val w by androidx.compose.animation.core.animateDpAsState(if (i == selected) 16.dp else 6.dp, label = "dot")
+                Box(Modifier.padding(horizontal = 3.dp).width(w).height(6.dp).clip(CircleShape).background(if (i == selected) Color.White else Color(0x40FFFFFF)))
+            }
+        }
+    }
+}
+
+/** Swipe left or right to move between tabs. */
+private fun Modifier.swipeTabs(current: Int, count: Int, onChange: (Int) -> Unit): Modifier =
+    pointerInput(current) {
+        var total = 0f
+        detectHorizontalDragGestures(
+            onDragStart = { total = 0f },
+            onDragEnd = {
+                val threshold = 60.dp.toPx()
+                when {
+                    total < -threshold && current < count - 1 -> onChange(current + 1)
+                    total > threshold && current > 0 -> onChange(current - 1)
+                }
+            },
+        ) { _, dx -> total += dx }
+    }
+
+/** The "Play" tab: big tiles that open each game in a sheet. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun PlayTiles(state: UiState, vm: MainViewModel) {
+    var open by rememberSaveable { mutableStateOf<Int?>(null) }
+    val month = java.time.YearMonth.now().month.getDisplayName(DateTextStyle.FULL, Locale.getDefault())
+    val tiles = listOf(
+        Triple("What should we watch?", "Spin for whoever's watching", listOf(Color(0xFF2B6CD4), Color(0xFF17142A))),
+        Triple("Watch party", "Send everyone a Nuvio link", listOf(Color(0xFFC2364F), Color(0xFF17142A))),
+        Triple("$month challenges", "+20 points each", listOf(Color(0xFF1F8A70), Color(0xFF17142A))),
+        Triple("Predictions", "Guess what happens next", listOf(Color(0xFF9B2C8F), Color(0xFF17142A))),
+    )
+    tiles.chunked(2).forEachIndexed { row, pair ->
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            pair.forEachIndexed { col, (title, sub, colors) ->
+                val index = row * 2 + col
+                Column(
+                    Modifier.weight(1f).height(120.dp).clip(RoundedCornerShape(18.dp)).background(Brush.linearGradient(colors))
+                        .clickable(role = Role.Button) { open = index }.padding(14.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(sub, fontSize = 12.sp, color = Color.White.copy(alpha = 0.85f))
+                    Text(title, style = display(17), color = Color.White)
+                }
+            }
+        }
+    }
+    open?.let { index ->
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { open = null },
+            sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = Color(0xFF15131D),
+        ) {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).navigationBarsPadding().padding(bottom = 24.dp)) {
+                when (index) {
+                    0 -> RouletteCard(state)
+                    1 -> PartyCard(state, vm)
+                    2 -> ChallengesCard(state)
+                    else -> PredictionsCard(state, vm)
+                }
+            }
+        }
+    }
+}
+

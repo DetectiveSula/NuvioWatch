@@ -241,7 +241,7 @@ fun NowScreen(state: UiState, vm: MainViewModel, onOpenSettings: () -> Unit) {
         if (others.isNotEmpty()) {
             item(key = "others") {
                 Column(Modifier.padding(top = 18.dp)) {
-                    Box(Modifier.padding(horizontal = 20.dp)) { SectionTitle("Everyone else") }
+                    Text("Continue watching", style = display(20), modifier = Modifier.padding(start = 20.dp, bottom = 12.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
                         items(others, key = { it.profile.index }) { OtherProfileCard(it, state) }
                     }
@@ -591,28 +591,49 @@ private fun LiveRow(state: UiState, live: LiveNow, now: Long, onReact: (String) 
 }
 
 @Composable
+/** A wide "Continue watching" card: the backdrop, whose it is, and how far they got. Tap to open the title page. */
 private fun OtherProfileCard(item: ProfileNow, state: UiState) {
     val entry = item.latest
     val info = entry?.let { state.titles[it.contentId] }
     val live = AlertPolicy.liveState(entry, state.clock) == LiveState.ACTIVE_NOW
-    val shape = RoundedCornerShape(20.dp)
-    Column(Modifier.width(170.dp).clip(shape).background(Glass).border(1.dp, if (live) LiveRed else GlassBorder, shape)) {
-        Box(Modifier.fillMaxWidth().height(96.dp).background(parseColor(item.profile.avatarColorHex).copy(alpha = 0.35f))) {
+    val openTitle = LocalOpenTitle.current
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        Modifier.width(230.dp).clip(shape)
+            .clickable(enabled = entry != null) { entry?.let { openTitle(it.contentId, app.nuviowatch.core.isSeries(it.contentType, it.season, it.videoId)) } },
+    ) {
+        Box(Modifier.fillMaxWidth().height(128.dp).clip(shape).background(parseColor(item.profile.avatarColorHex).copy(alpha = 0.35f)).border(1.dp, if (live) LiveRed else GlassBorder, shape)) {
             (info?.background ?: info?.poster)?.let {
                 AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
             }
-            Box(Modifier.align(Alignment.BottomStart).padding(10.dp)) { ProfileAvatar(item.profile, size = 26.dp) }
-            if (live) Box(Modifier.align(Alignment.TopEnd).padding(6.dp)) { LiveDot(6.dp) }
-        }
-        Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp)) {
-            Text(info?.name ?: entry?.contentId ?: "Nothing yet", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val details = when {
-                entry == null -> item.profile.name
-                entry.isCompleted -> "${item.profile.name} · Finished · ${timeAgo(entry.lastWatchedMs, state.clock)}"
-                else -> "${item.profile.name} · ${(entry.fraction * 100).toInt()}% · ${timeAgo(entry.lastWatchedMs, state.clock)}"
+            Box(Modifier.matchParentSize().background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to Color(0xCC0A0910))))
+            // Whose it is
+            Row(
+                Modifier.align(Alignment.TopStart).padding(8.dp).clip(RoundedCornerShape(50)).background(Color(0xB30A0910)).padding(start = 3.dp, end = 10.dp, top = 3.dp, bottom = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ProfileAvatar(item.profile, size = 20.dp)
+                Spacer(Modifier.width(6.dp))
+                Text(item.profile.name, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
-            Text(details, style = MaterialTheme.typography.bodySmall, color = TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (live) Box(Modifier.align(Alignment.TopEnd).padding(10.dp)) { LiveDot(6.dp) }
+            Text(
+                info?.name ?: entry?.contentId ?: "Nothing yet",
+                style = display(15), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 10.dp, end = 10.dp, bottom = 12.dp),
+            )
+            if (entry != null) {
+                Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color(0x33FFFFFF))) {
+                    Box(Modifier.fillMaxWidth(if (entry.isCompleted) 1f else entry.fraction).height(4.dp).background(LiveRed))
+                }
+            }
         }
+        val details = when {
+            entry == null -> item.profile.name
+            entry.isCompleted -> listOfNotNull(episodeLabel(entry.season, entry.episode), "Finished", timeAgo(entry.lastWatchedMs, state.clock)).joinToString(" · ")
+            else -> listOfNotNull(episodeLabel(entry.season, entry.episode), "${(entry.fraction * 100).toInt()}%", timeAgo(entry.lastWatchedMs, state.clock)).joinToString(" · ")
+        }
+        Text(details, style = MaterialTheme.typography.bodySmall, color = TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 7.dp, start = 2.dp))
     }
 }
 
