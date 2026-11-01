@@ -286,6 +286,9 @@ fun NowScreen(state: UiState, vm: MainViewModel, onOpenSettings: () -> Unit) {
 }
 
 /** Big for short titles, smaller for long ones so the whole name fits. */
+/** A soft shadow under hero titles, so they read on any picture. */
+private val TitleShadow = androidx.compose.ui.graphics.Shadow(Color.Black.copy(alpha = 0.75f), androidx.compose.ui.geometry.Offset(0f, 2f), 18f)
+
 private fun heroTitleSize(name: String): Int = when {
     name.length <= 16 -> 44
     name.length <= 28 -> 38
@@ -352,7 +355,7 @@ private fun spoilerAhead(state: UiState, live: LiveNow): Int {
 private fun SpoilerSafeText(text: String, ahead: Int, color: Color, small: Boolean = false) {
     val size = if (small) 12.sp else 16.sp
     when {
-        ahead <= 0 -> Text(text, color = color, fontSize = size, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        ahead <= 0 -> Text(text, color = color, fontSize = size, maxLines = 1, overflow = TextOverflow.Ellipsis, style = TextStyle(shadow = TitleShadow))
         Build.VERSION.SDK_INT >= 31 -> Text(text, color = color, fontSize = size, maxLines = 1, modifier = Modifier.blur(8.dp))
         else -> Text("Episode hidden", color = color, fontSize = size)
     }
@@ -411,7 +414,8 @@ private fun Hero(state: UiState, hero: ProfileNow?, tint: Color) {
                 Brush.verticalGradient(
                     0f to Ink.copy(alpha = 0.6f),
                     0.22f to Color.Transparent,
-                    0.45f to Color.Transparent,
+                    0.38f to Color.Transparent,
+                    0.62f to Ink.copy(alpha = 0.7f),
                     1f to Ink,
                 ),
             ),
@@ -460,7 +464,7 @@ private fun Hero(state: UiState, hero: ProfileNow?, tint: Color) {
                 }
             }
             val name = info?.name ?: entry.contentId
-            Text(name, style = display(heroTitleSize(name)), maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(name, style = display(heroTitleSize(name)).copy(shadow = TitleShadow), maxLines = 3, overflow = TextOverflow.Ellipsis)
             listOfNotNull(episodeLabel(entry.season, entry.episode), info?.year).joinToString(" · ").takeIf { it.isNotBlank() }?.let {
                 Text(it, color = Color(0xFFD6D1E6))
             }
@@ -488,7 +492,8 @@ private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (Strin
         }
         Box(
             Modifier.matchParentSize().background(
-                Brush.verticalGradient(0f to Ink.copy(alpha = 0.6f), 0.22f to Color.Transparent, 0.45f to Color.Transparent, 1f to Ink),
+                // Darker behind the text at the bottom, so titles stay readable on bright pictures.
+                Brush.verticalGradient(0f to Ink.copy(alpha = 0.6f), 0.22f to Color.Transparent, 0.38f to Color.Transparent, 0.62f to Ink.copy(alpha = 0.7f), 1f to Ink),
             ),
         )
         Row(
@@ -524,7 +529,7 @@ private fun LiveHero(state: UiState, live: LiveNow, tint: Color, onReact: (Strin
                 )
             }
             val name = live.info?.name ?: event.title
-            Text(name, style = display(heroTitleSize(name)), maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(name, style = display(heroTitleSize(name)).copy(shadow = TitleShadow), maxLines = 3, overflow = TextOverflow.Ellipsis)
             val ahead = spoilerAhead(state, live)
             event.subtitle?.takeIf { it.isNotBlank() }?.let { SpoilerSafeText(it, ahead, Color(0xFFD6D1E6)) }
             if (ahead > 0) Pill("⚠️ ${who} is $ahead episode${if (ahead == 1) "" else "s"} ahead, careful!", Color(0xFFFFD166))
