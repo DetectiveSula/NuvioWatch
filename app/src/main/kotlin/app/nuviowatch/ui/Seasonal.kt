@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.nuviowatch.core.Season
@@ -147,7 +148,7 @@ private fun DrawScope.flower(center: Offset, r: Float, color: Color) {
 }
 
 private fun DrawScope.leaf(center: Offset, r: Float, color: Color, angle: Float) {
-    androidx.compose.ui.graphics.drawscope.rotate(angle, center) {
+    rotate(angle, center) {
         val p = Path().apply {
             moveTo(center.x, center.y - r)
             quadraticBezierTo(center.x + r * 0.9f, center.y, center.x, center.y + r)
