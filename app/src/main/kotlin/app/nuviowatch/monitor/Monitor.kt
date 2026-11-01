@@ -117,16 +117,18 @@ object Monitor {
                     // so wait a minute after the last update (a burst of pausing and skipping stays one
                     // summary), then send it. More updates later quietly update it.
                     if (newActivity && !covered) {
-                        // Only a finished episode or film (90%+) gets a summary, a minute later. A skip, a
-                        // pause or stopping partway look the same in Nuvio's updates, so they only log progress.
+                        // Finished (90%+): summary in a minute. A skip, a pause and stopping partway look the
+                        // same in Nuvio's updates, so those wait 30 minutes: any later update (they carried on)
+                        // starts the wait again, so it only arrives once they've really gone quiet.
                         val finished = session.latest?.completed == true
-                        val due = if (finished) maxOf(session.lastActivityAt, now - SYNC_SUMMARY_DELAY_MS) + SYNC_SUMMARY_DELAY_MS else null
+                        val wait = if (finished) SYNC_SUMMARY_DELAY_MS else SYNC_SUMMARY_PARTWAY_MS
+                        val due = maxOf(session.lastActivityAt, now - SYNC_SUMMARY_DELAY_MS) + wait
                         session = session.copy(notifiedAt = now, summaryDueAt = due)
                         val pct = session.latest?.let { if (it.duration > 0) "${(it.position * 100 / it.duration).coerceIn(0, 100)}%" else null }
                         prefs.setStatus(
                             "summary",
                             if (finished) "Nuvio: ${profile?.name ?: "someone"} finished, summary in about a minute"
-                            else "Nuvio: logged ${profile?.name ?: "someone"} at ${pct ?: "their place"} (no notification until they finish)",
+                            else "Nuvio: ${profile?.name ?: "someone"} at ${pct ?: "their place"}, summary in 30 minutes unless they carry on",
                         )
                     } else {
                         if (covered) prefs.setStatus("summary", "Sync summary skipped: already sent when they stopped")
@@ -222,4 +224,6 @@ object Monitor {
     private const val LIVE_COVER_MS = 15 * 60_000L
     /** How long after Nuvio's last update the summary goes out, for devices without Nuvio Watch. */
     private const val SYNC_SUMMARY_DELAY_MS = 60_000L
+    /** When they stopped partway (or paused or skipped): long enough that carrying on doesn't count. */
+    private const val SYNC_SUMMARY_PARTWAY_MS = 30 * 60_000L
 }
